@@ -1,0 +1,712 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { User } from 'firebase/auth';
+import { HardDrive, Plus, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
+import { VaultFile, ActiveTab, FileCategory } from './types';
+import { loadVaultFiles, saveVaultFiles, getTemplateForCategory } from './utils/storage';
+import { parseFrontmatter, toggleCheckboxInMarkdown } from './utils/markdownParser';
+import { initAuth, googleSignIn, logout } from './utils/googleAuth';
+import {
+  saveFileToDrive,
+  deleteFileFromDrive,
+  getVaultFolderHierarchy,
+  importFilesFromDrive,
+  syncAllFilesToDrive,
+} from './utils/googleDrive';
+import { VaultHeader } from './components/VaultHeader';
+import { VaultSidebar } from './components/VaultSidebar';
+import { MarkdownEditor } from './components/MarkdownEditor';
+import { LifeMatrixView } from './components/LifeMatrixView';
+import { AgentSkillsLab } from './components/AgentSkillsLab';
+import { SkillPlaygroundModal } from './components/SkillPlaygroundModal';
+import { NewFileModal } from './components/NewFileModal';
+import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
+import { ConfirmDriveActionModal } from './components/ConfirmDriveActionModal';
+import { GoogleDriveStartScreen } from './components/GoogleDriveStartScreen';
+
+export default function App() {
+  // If user previously selected offline mode, load local storage files; otherwise start empty until auth
+  const [files, setFiles] = useState<VaultFile[]>(() => {
+    const bypassed = localStorage.getItem('md_vault_bypassed_auth') === 'true';
+    return bypassed ? loadVaultFiles() : [];
+  });
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(() => {
+    const bypassed = localStorage.getItem('md_vault_bypassed_auth') === 'true';
+    if (bypassed) {
+      const loaded = loadVaultFiles();
+      return loaded.length > 0 ? loaded[0].id : null;
+    }
+    return null;
+  });
+  const [activeTab, setActiveTab] = useState<ActiveTab>('editor');
+  const [isExportingZip, setIsExportingZip] = useState(false);
+  const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
+  const [newFileInitialFolder, setNewFileInitialFolder] = useState<string>('goals');
+  const [skillForPlayground, setSkillForPlayground] = useState<VaultFile | null>(null);
+
+  // Google Drive & Auth State
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [hasBypassedAuth, setHasBypassedAuth] = useState<boolean>(() => {
+    return localStorage.getItem('md_vault_bypassed_auth') === 'true';
+  });
+  const [isStartingSignIn, setIsStartingSignIn] = useState(false);
+  const [startScreenError, setStartScreenError] = useState<string | null>(null);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [confirmDriveFile, setConfirmDriveFile] = useState<VaultFile | null>(null);
+  const [isSavingSingleFileToDrive, setIsSavingSingleFileToDrive] = useState(false);
+  const [isDriveSyncing, setIsDriveSyncing] = useState(false);
+  const [isRefreshingDrive, setIsRefreshingDrive] = useState(false);
+  const [isLoadingDriveFiles, setIsLoadingDriveFiles] = useState(false);
+  const [toastNotification, setToastNotification] = useState<{
+    text: string;
+    type: 'success' | 'info' | 'error';
+  } | null>(null);
+
+  /**
+   * Fetches ONLY files that exist in Google Drive and replaces the files state
+   */
+  const fetchFilesFromDrive = useCallback(async (isSilent = false) => {
+    try {
+      setIsRefreshingDrive(true);
+      if (!isSilent) setIsLoadingDriveFiles(true);
+      const driveFiles = await importFilesFromDrive();
+
+      // STRICT REQUIREMENT: Only display files that exist in Drive!
+      setFiles(driveFiles);
+
+      if (driveFiles.length > 0) {
+        setSelectedFileId((prev) => {
+          const exists = driveFiles.some((f) => f.id === prev);
+          return exists ? prev : driveFiles[0].id;
+        });
+        if (!isSilent) {
+          setToastNotification({
+            type: 'success',
+            text: `Synced with Google Drive: loaded ${driveFiles.length} file(s).`,
+          });
+        }
+      } else {
+        setSelectedFileId(null);
+        if (!isSilent) {
+          setToastNotification({
+            type: 'info',
+            text: 'Google Drive connected: 0 files in /Markdown Life Vault/.',
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to load files from Google Drive:', err);
+      setToastNotification({
+        type: 'error',
+        text: err?.message || 'Failed to load files from Google Drive',
+      });
+    } finally {
+      setIsRefreshingDrive(false);
+      setIsLoadingDriveFiles(false);
+    }
+  }, []);
+
+  // Initialize Firebase Auth listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user) => {
+        setGoogleUser(user);
+        setHasBypassedAuth(false);
+        // Automatically load ONLY files that exist in Google Drive
+        fetchFilesFromDrive(false);
+      },
+      () => {
+        setGoogleUser(null);
+      }
+    );
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [fetchFilesFromDrive]);
+
+  // Toast notification auto-dismiss
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
+
+  // Sync with localStorage ONLY when in offline mode (not authenticated with Google Drive)
+  useEffect(() => {
+    if (!googleUser && hasBypassedAuth) {
+      saveVaultFiles(files);
+    }
+  }, [files, googleUser, hasBypassedAuth]);
+
+  // Currently active file object
+  const currentFile = files.find((f) => f.id === selectedFileId) || files[0] || null;
+
+  // Auto-save edited file to Google Drive (debounced by 1.2s)
+  useEffect(() => {
+    if (!googleUser || !currentFile) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsDriveSyncing(true);
+        await saveFileToDrive(currentFile);
+      } catch (err) {
+        console.error('Auto-save to Google Drive error:', err);
+      } finally {
+        setIsDriveSyncing(false);
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [currentFile?.content, googleUser]);
+
+  // Handle content updates to current file
+  const handleUpdateContent = (newContent: string) => {
+    if (!currentFile) return;
+    const { frontmatter } = parseFrontmatter(newContent);
+    const updated: VaultFile = {
+      ...currentFile,
+      content: newContent,
+      frontmatter,
+      updatedAt: Date.now(),
+    };
+
+    setFiles((prev) => prev.map((f) => (f.id === currentFile.id ? updated : f)));
+  };
+
+  // Toggle a checkbox in the active file
+  const handleToggleCheckbox = (taskIndex: number) => {
+    if (!currentFile) return;
+    const newContent = toggleCheckboxInMarkdown(currentFile.content, taskIndex);
+    handleUpdateContent(newContent);
+  };
+
+  // Navigate to another file (e.g. from wiki-link or relation card)
+  const handleNavigateToFile = (query: string) => {
+    const cleanQuery = query.replace(/^\[\[|\]\]$/g, '').trim().toLowerCase();
+    const found = files.find((f) => {
+      const matchName = f.name.toLowerCase() === cleanQuery || f.name.toLowerCase() === `${cleanQuery}.md`;
+      const matchPath = f.path.toLowerCase() === cleanQuery;
+      const matchTitle = f.frontmatter.title?.toLowerCase() === cleanQuery;
+      return matchName || matchPath || matchTitle;
+    });
+
+    if (found) {
+      setSelectedFileId(found.id);
+      setActiveTab('editor');
+    }
+  };
+
+  // Create new file
+  const handleCreateFile = async (folder: string, filename: string, title: string) => {
+    const category: FileCategory = ['goals', 'projects', 'skills', 'notes'].includes(folder)
+      ? (folder as FileCategory)
+      : 'custom';
+
+    const content = getTemplateForCategory(category, title);
+    const { frontmatter } = parseFrontmatter(content);
+    const cleanName = filename.endsWith('.md') ? filename : `${filename}.md`;
+    const path = `${folder}/${cleanName}`;
+
+    const newFile: VaultFile = {
+      id: path,
+      name: cleanName,
+      path,
+      folder,
+      content,
+      frontmatter,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    if (googleUser) {
+      try {
+        setIsSavingSingleFileToDrive(true);
+        await saveFileToDrive(newFile);
+        setFiles((prev) => [newFile, ...prev]);
+        setSelectedFileId(newFile.id);
+        setActiveTab('editor');
+        setToastNotification({
+          type: 'success',
+          text: `Created and saved "${cleanName}" directly to Google Drive!`,
+        });
+      } catch (err: any) {
+        console.error('Error saving new file to Google Drive:', err);
+        setToastNotification({
+          type: 'error',
+          text: `Failed to create file in Google Drive: ${err?.message}`,
+        });
+      } finally {
+        setIsSavingSingleFileToDrive(false);
+      }
+    } else {
+      setFiles((prev) => [newFile, ...prev]);
+      setSelectedFileId(newFile.id);
+      setActiveTab('editor');
+    }
+  };
+
+  // Delete file
+  const handleDeleteFile = async (id: string) => {
+    const fileToDelete = files.find((f) => f.id === id);
+    if (!fileToDelete) return;
+
+    const confirmed = window.confirm(`Are you sure you want to delete "${fileToDelete.name}"?`);
+    if (!confirmed) return;
+
+    if (googleUser) {
+      try {
+        await deleteFileFromDrive(fileToDelete.folder, fileToDelete.name);
+        setToastNotification({
+          type: 'info',
+          text: `Deleted "${fileToDelete.name}" from Google Drive.`,
+        });
+      } catch (err: any) {
+        console.error('Failed to delete file from Google Drive:', err);
+        setToastNotification({
+          type: 'error',
+          text: `Failed to delete from Drive: ${err?.message}`,
+        });
+      }
+    }
+
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+    if (selectedFileId === id) {
+      const remaining = files.filter((f) => f.id !== id);
+      setSelectedFileId(remaining[0]?.id || null);
+    }
+  };
+
+  // Duplicate file
+  const handleDuplicateFile = async (file: VaultFile) => {
+    const copyName = file.name.replace(/\.md$/, '') + '-copy.md';
+    const copyPath = `${file.folder}/${copyName}`;
+    const duplicate: VaultFile = {
+      ...file,
+      id: copyPath,
+      name: copyName,
+      path: copyPath,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    if (googleUser) {
+      try {
+        await saveFileToDrive(duplicate);
+        setFiles((prev) => [duplicate, ...prev]);
+        setSelectedFileId(duplicate.id);
+        setToastNotification({
+          type: 'success',
+          text: `Duplicated "${copyName}" in Google Drive.`,
+        });
+      } catch (err: any) {
+        console.error('Error duplicating file in Google Drive:', err);
+      }
+    } else {
+      setFiles((prev) => [duplicate, ...prev]);
+      setSelectedFileId(duplicate.id);
+    }
+  };
+
+  // Import markdown files
+  const handleImportFiles = async (fileList: FileList) => {
+    const imported: VaultFile[] = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const item = fileList[i];
+      if (item.name.endsWith('.md') || item.name.endsWith('.markdown') || item.type.includes('markdown')) {
+        const text = await item.text();
+        const { frontmatter } = parseFrontmatter(text);
+        const folder = frontmatter.category || 'notes';
+        const path = `${folder}/${item.name}`;
+
+        const vaultFile: VaultFile = {
+          id: path,
+          name: item.name,
+          path,
+          folder,
+          content: text,
+          frontmatter,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+
+        if (googleUser) {
+          try {
+            await saveFileToDrive(vaultFile);
+          } catch (err) {
+            console.error(`Failed to save imported file ${item.name} to Drive:`, err);
+          }
+        }
+
+        imported.push(vaultFile);
+      }
+    }
+
+    if (imported.length > 0) {
+      if (googleUser) {
+        await fetchFilesFromDrive();
+      } else {
+        setFiles((prev) => [...imported, ...prev]);
+        setSelectedFileId(imported[0].id);
+        setActiveTab('editor');
+      }
+    }
+  };
+
+  // Initialize Starter Templates in Google Drive
+  const handleInitializeDriveTemplates = async () => {
+    const ok = window.confirm(
+      'This will upload the standard Markdown Life Vault starter files (Goals, Projects, Skills, Notes) into your Google Drive (/Markdown Life Vault/). Proceed?'
+    );
+    if (!ok) return;
+
+    try {
+      setIsRefreshingDrive(true);
+      const starterFiles = loadVaultFiles();
+      await syncAllFilesToDrive(starterFiles);
+      await fetchFilesFromDrive(false);
+      setToastNotification({
+        type: 'success',
+        text: `Initialized ${starterFiles.length} starter files in your Google Drive!`,
+      });
+    } catch (err: any) {
+      console.error('Failed to initialize starter files in Drive:', err);
+      setToastNotification({
+        type: 'error',
+        text: `Error initializing Google Drive templates: ${err?.message}`,
+      });
+    } finally {
+      setIsRefreshingDrive(false);
+    }
+  };
+
+  // Reset to defaults
+  const handleResetVault = () => {
+    if (googleUser) {
+      handleInitializeDriveTemplates();
+    } else {
+      const ok = window.confirm(
+        'Reset vault to initial template files? Any unsaved edits will be overwritten.'
+      );
+      if (!ok) return;
+      localStorage.removeItem('md_life_vault_v1');
+      const fresh = loadVaultFiles();
+      setFiles(fresh);
+      setSelectedFileId(fresh[0]?.id || null);
+    }
+  };
+
+  const handleOpenNewFileInFolder = (folder: string) => {
+    setNewFileInitialFolder(folder);
+    setIsNewFileModalOpen(true);
+  };
+
+  // Google Drive Auth Handlers
+  const handleSignInWithGoogle = async () => {
+    try {
+      setIsStartingSignIn(true);
+      setStartScreenError(null);
+      const result = await googleSignIn();
+      if (result) {
+        setGoogleUser(result.user);
+        setHasBypassedAuth(false);
+        localStorage.removeItem('md_vault_bypassed_auth');
+        await fetchFilesFromDrive(false);
+      }
+    } catch (err: any) {
+      console.error('Sign-in error:', err);
+      setStartScreenError(err?.message || 'Failed to sign in with Google');
+      throw err;
+    } finally {
+      setIsStartingSignIn(false);
+    }
+  };
+
+  const handleSignOutGoogle = async () => {
+    await logout();
+    setGoogleUser(null);
+    setHasBypassedAuth(false);
+    localStorage.removeItem('md_vault_bypassed_auth');
+    setFiles([]);
+    setSelectedFileId(null);
+    setToastNotification({
+      type: 'info',
+      text: 'Disconnected from Google account.',
+    });
+  };
+
+  const handleContinueOffline = () => {
+    setHasBypassedAuth(true);
+    localStorage.setItem('md_vault_bypassed_auth', 'true');
+    const localFiles = loadVaultFiles();
+    setFiles(localFiles);
+    setSelectedFileId(localFiles[0]?.id || null);
+    setToastNotification({
+      type: 'info',
+      text: 'Using local storage mode. Connect Google Drive anytime from the top bar.',
+    });
+  };
+
+  const handleRequestSaveFileToDrive = (file: VaultFile) => {
+    if (!googleUser) {
+      setIsDriveModalOpen(true);
+      return;
+    }
+    setConfirmDriveFile(file);
+  };
+
+  const handleConfirmedSaveFileToDrive = async () => {
+    if (!confirmDriveFile) return;
+    const target = confirmDriveFile;
+    setConfirmDriveFile(null);
+    try {
+      setIsSavingSingleFileToDrive(true);
+      const { folderMap, rootId } = await getVaultFolderHierarchy();
+      const folderId = folderMap[target.folder] || rootId;
+      const result = await saveFileToDrive(target, folderId);
+      setToastNotification({
+        type: 'success',
+        text: result.isNew
+          ? `Created "${target.name}" in Google Drive (/Markdown Life Vault/${target.folder})!`
+          : `Updated "${target.name}" in Google Drive (/Markdown Life Vault/${target.folder})!`,
+      });
+    } catch (err: any) {
+      console.error('Failed to save file to Google Drive:', err);
+      setToastNotification({
+        type: 'error',
+        text: err?.message || `Failed to save ${target.name} to Google Drive`,
+      });
+    } finally {
+      setIsSavingSingleFileToDrive(false);
+    }
+  };
+
+  // If user is not signed in to Google Drive and hasn't chosen offline exploration, show start screen
+  if (!googleUser && !hasBypassedAuth) {
+    return (
+      <GoogleDriveStartScreen
+        onSignIn={handleSignInWithGoogle}
+        onContinueOffline={handleContinueOffline}
+        isSigningIn={isStartingSignIn}
+        errorMessage={startScreenError}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-screen w-full bg-stone-100 text-stone-900 overflow-hidden font-sans antialiased">
+      {/* Top Vault Header */}
+      <VaultHeader
+        files={files}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onOpenNewFileModal={() => {
+          setNewFileInitialFolder('goals');
+          setIsNewFileModalOpen(true);
+        }}
+        onImportFiles={handleImportFiles}
+        onResetVault={handleResetVault}
+        isExportingZip={isExportingZip}
+        setIsExportingZip={setIsExportingZip}
+        googleUser={googleUser}
+        onOpenDriveModal={() => setIsDriveModalOpen(true)}
+        onRefreshDrive={() => fetchFilesFromDrive(false)}
+        isRefreshingDrive={isRefreshingDrive}
+      />
+
+      {/* Floating Notification Toast */}
+      {toastNotification && (
+        <div className="fixed bottom-5 right-5 z-70 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div
+            className={`px-4 py-3 rounded-xl border shadow-lg text-xs font-medium max-w-sm flex items-center gap-2.5 ${
+              toastNotification.type === 'success'
+                ? 'bg-emerald-900 text-emerald-100 border-emerald-700'
+                : toastNotification.type === 'error'
+                ? 'bg-red-900 text-red-100 border-red-700'
+                : 'bg-stone-900 text-stone-100 border-stone-700'
+            }`}
+          >
+            <span>{toastNotification.text}</span>
+            <button
+              type="button"
+              onClick={() => setToastNotification(null)}
+              className="ml-auto opacity-70 hover:opacity-100 text-sm font-bold cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Workspace Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* TAB 1: Editor View */}
+        {activeTab === 'editor' && (
+          <div className="flex-1 flex overflow-hidden w-full">
+            {/* Folder / File Explorer Sidebar */}
+            <VaultSidebar
+              files={files}
+              selectedFileId={selectedFileId}
+              onSelectFile={(id) => setSelectedFileId(id)}
+              onDeleteFile={handleDeleteFile}
+              onDuplicateFile={handleDuplicateFile}
+              onQuickNewFileInFolder={handleOpenNewFileInFolder}
+              onDropFiles={handleImportFiles}
+            />
+
+            {/* Markdown Editor / Loading / Empty State */}
+            {isLoadingDriveFiles ? (
+              <div className="flex-1 flex flex-col items-center justify-center bg-white text-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3" />
+                <h3 className="text-base font-semibold text-stone-800">Reading Google Drive Vault...</h3>
+                <p className="text-xs text-stone-500 mt-1">Scanning folder: /Markdown Life Vault/</p>
+              </div>
+            ) : files.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-stone-50/50 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mb-4 shadow-xs">
+                  <HardDrive className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-semibold text-stone-900 mb-2">
+                  {googleUser ? 'Your Google Drive Vault is Empty' : 'Your Vault is Empty'}
+                </h2>
+                <p className="text-sm text-stone-600 max-w-md mb-6 leading-relaxed">
+                  {googleUser
+                    ? 'Connected to Google Drive, but no markdown (.md) files were found in your "/Markdown Life Vault/" folder. You can create your first file or populate it with starter templates.'
+                    : 'No files are currently loaded. Create your first file or initialize starter templates.'}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    id="btn-empty-new-file"
+                    onClick={() => {
+                      setNewFileInitialFolder('goals');
+                      setIsNewFileModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create First File
+                  </button>
+
+                  {googleUser && (
+                    <button
+                      type="button"
+                      id="btn-empty-init-templates"
+                      onClick={handleInitializeDriveTemplates}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Initialize Starter Templates in Drive
+                    </button>
+                  )}
+
+                  {googleUser && (
+                    <button
+                      type="button"
+                      id="btn-empty-refresh-drive"
+                      onClick={() => fetchFilesFromDrive(false)}
+                      disabled={isRefreshingDrive}
+                      className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingDrive ? 'animate-spin text-blue-600' : ''}`} />
+                      Refresh from Drive
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : currentFile ? (
+              <MarkdownEditor
+                file={currentFile}
+                allFiles={files}
+                onChangeContent={handleUpdateContent}
+                onNavigateToFile={handleNavigateToFile}
+                onToggleCheckbox={handleToggleCheckbox}
+                onOpenSkillPlayground={(s) => setSkillForPlayground(s)}
+                onSaveToDrive={handleRequestSaveFileToDrive}
+                isSavingToDrive={isSavingSingleFileToDrive}
+                isDriveSyncing={isDriveSyncing}
+                googleUser={googleUser}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-white text-stone-400">
+                Select a file from the vault sidebar
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: Life Matrix View */}
+        {activeTab === 'matrix' && (
+          <LifeMatrixView
+            files={files}
+            onSelectFile={(id) => {
+              setSelectedFileId(id);
+              setActiveTab('editor');
+            }}
+            onOpenSkillPlayground={(s) => setSkillForPlayground(s)}
+            onQuickNewFileInFolder={handleOpenNewFileInFolder}
+          />
+        )}
+
+        {/* TAB 3: Agent Skills Lab View */}
+        {activeTab === 'skills-hub' && (
+          <AgentSkillsLab
+            files={files}
+            onSelectFile={(id) => {
+              setSelectedFileId(id);
+              setActiveTab('editor');
+            }}
+            onOpenSkillPlayground={(s) => setSkillForPlayground(s)}
+            onQuickNewFileInFolder={handleOpenNewFileInFolder}
+          />
+        )}
+      </div>
+
+      {/* New File Modal */}
+      {isNewFileModalOpen && (
+        <NewFileModal
+          initialFolder={newFileInitialFolder}
+          existingFolders={Array.from(new Set(files.map((f) => f.folder)))}
+          onClose={() => setIsNewFileModalOpen(false)}
+          onCreateFile={handleCreateFile}
+        />
+      )}
+
+      {/* Skill Playground Modal */}
+      {skillForPlayground && (
+        <SkillPlaygroundModal
+          skill={skillForPlayground}
+          onClose={() => setSkillForPlayground(null)}
+        />
+      )}
+
+      {/* Google Drive Auth & Sync Modal */}
+      <GoogleDriveSyncModal
+        isOpen={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
+        user={googleUser}
+        onSignInWithGoogle={handleSignInWithGoogle}
+        onSignOut={handleSignOutGoogle}
+        files={files}
+        onImportFilesFromDrive={() => fetchFilesFromDrive(false)}
+      />
+
+      {/* Explicit User Confirmation for Single File Save to Drive */}
+      {confirmDriveFile && (
+        <ConfirmDriveActionModal
+          isOpen={!!confirmDriveFile}
+          onClose={() => setConfirmDriveFile(null)}
+          onConfirm={handleConfirmedSaveFileToDrive}
+          file={confirmDriveFile}
+        />
+      )}
+    </div>
+  );
+}
