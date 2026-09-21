@@ -4,6 +4,8 @@ A modern, markdown-first personal operating system and agent skills repository t
 
 Manage your goals, projects, agent skill templates, and interconnected notes in an elegant, distraction-free environment — accessible anywhere with zero proprietary lock-in.
 
+Example: http://sherol.github.io/mdlife
+
 ---
 
 ## ✨ Features
