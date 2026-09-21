@@ -28,8 +28,12 @@ export const AgentSkillsLab: React.FC<AgentSkillsLabProps> = ({
   onOpenSkillPlayground,
   onQuickNewFileInFolder,
 }) => {
-  const skills = files.filter((f) => f.folder === 'skills');
-  const projects = files.filter((f) => f.folder === 'projects');
+  const skills = files.filter(
+    (f) => f.folder === 'skills' || f.folder.startsWith('skills/') || f.frontmatter.category === 'skills'
+  );
+  const projects = files.filter(
+    (f) => f.folder === 'projects' || f.folder.startsWith('projects/') || f.frontmatter.category === 'projects'
+  );
 
   return (
     <div className="flex-1 overflow-y-auto bg-stone-50/50 p-6 md:p-8">

@@ -20,6 +20,9 @@ import {
   HardDrive,
   CloudUpload,
   Loader2,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { VaultFile, FileFrontmatter } from '../types';
@@ -33,6 +36,7 @@ interface MarkdownEditorProps {
   onNavigateToFile: (filenameOrPath: string) => void;
   onToggleCheckbox: (index: number) => void;
   onOpenSkillPlayground: (file: VaultFile) => void;
+  onRenameFile?: (fileId: string, newFileName: string) => Promise<boolean> | boolean;
   onSaveToDrive?: (file: VaultFile) => void;
   isSavingToDrive?: boolean;
   isDriveSyncing?: boolean;
@@ -46,6 +50,7 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   onNavigateToFile,
   onToggleCheckbox,
   onOpenSkillPlayground,
+  onRenameFile,
   onSaveToDrive,
   isSavingToDrive = false,
   isDriveSyncing = false,
@@ -54,7 +59,24 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   const [viewMode, setViewMode] = useState<'split' | 'edit' | 'preview'>('split');
   const [showMetadataDrawer, setShowMetadataDrawer] = useState(false);
   const [showWikiDropdown, setShowWikiDropdown] = useState(false);
+  const [isEditingFilename, setIsEditingFilename] = useState(false);
+  const [editingFilenameVal, setEditingFilenameVal] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleStartRename = () => {
+    setEditingFilenameVal(file.name.replace(/\.md$/, ''));
+    setIsEditingFilename(true);
+  };
+
+  const handleSaveFilename = async () => {
+    const trimmed = editingFilenameVal.trim();
+    if (!trimmed || !onRenameFile) {
+      setIsEditingFilename(false);
+      return;
+    }
+    await onRenameFile(file.id, trimmed);
+    setIsEditingFilename(false);
+  };
 
   // Quick stats
   const words = file.content.trim() ? file.content.trim().split(/\s+/).length : 0;
@@ -408,6 +430,26 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
               className="w-full bg-white border border-stone-200 rounded px-2 py-1 text-stone-800 text-xs"
             />
           </div>
+
+          {/* Quick Filename Rename in Drawer */}
+          {onRenameFile && (
+            <div className="sm:col-span-2 lg:col-span-4 pt-2 border-t border-stone-200/80 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-stone-500 font-medium">Filename:</span>
+                <code className="font-mono text-stone-800 bg-white border border-stone-200 px-2 py-0.5 rounded">
+                  {file.path}
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartRename}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 rounded font-medium text-xs transition-colors cursor-pointer"
+              >
+                <Pencil className="w-3 h-3" />
+                <span>Rename File</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -421,8 +463,58 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
             }`}
           >
             <div className="px-4 py-1.5 bg-stone-100/60 border-b border-stone-200 text-[11px] text-stone-500 flex items-center justify-between">
-              <span className="font-mono text-stone-600">{file.path}</span>
-              <span>Source Markdown (YAML Frontmatter + Content)</span>
+              {isEditingFilename ? (
+                <div className="flex items-center gap-1.5 py-0.5">
+                  <span className="font-mono text-stone-500">/{file.folder}/</span>
+                  <input
+                    type="text"
+                    value={editingFilenameVal}
+                    onChange={(e) => setEditingFilenameVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveFilename();
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setIsEditingFilename(false);
+                      }
+                    }}
+                    autoFocus
+                    className="font-mono text-xs px-2 py-0.5 bg-white border border-stone-300 rounded text-stone-900 focus:outline-hidden focus:border-stone-500 min-w-48"
+                  />
+                  <span className="font-mono text-stone-500">.md</span>
+                  <button
+                    type="button"
+                    onClick={handleSaveFilename}
+                    className="px-2 py-0.5 bg-stone-900 text-white hover:bg-stone-800 rounded text-[11px] font-medium transition-colors cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingFilename(false)}
+                    className="px-2 py-0.5 bg-stone-200 text-stone-700 hover:bg-stone-300 rounded text-[11px] transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group">
+                  <span className="font-mono text-stone-700 font-semibold">{file.path}</span>
+                  {onRenameFile && (
+                    <button
+                      type="button"
+                      onClick={handleStartRename}
+                      title="Rename this .md file"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-stone-500 hover:text-stone-800 hover:bg-stone-200/80 rounded transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                      <span>Rename</span>
+                    </button>
+                  )}
+                </div>
+              )}
+              <span className="hidden sm:inline">Source Markdown (YAML Frontmatter + Content)</span>
             </div>
             <textarea
               ref={textareaRef}

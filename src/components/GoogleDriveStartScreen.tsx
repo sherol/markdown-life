@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   HardDrive,
   Lock,
@@ -9,6 +9,9 @@ import {
   Loader2,
   AlertCircle,
   FolderCheck,
+  ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface GoogleDriveStartScreenProps {
@@ -24,6 +27,18 @@ export const GoogleDriveStartScreen: React.FC<GoogleDriveStartScreenProps> = ({
   isSigningIn,
   errorMessage,
 }) => {
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isUnauthorizedDomain = errorMessage?.includes('unauthorized-domain');
+
+  const handleCopyHostname = () => {
+    if (currentHostname) {
+      navigator.clipboard.writeText(currentHostname);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 3000);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-stone-100 text-stone-900 flex flex-col justify-between p-4 sm:p-6 lg:p-8 font-sans antialiased">
       {/* Top minimal bar */}
@@ -63,11 +78,62 @@ export const GoogleDriveStartScreen: React.FC<GoogleDriveStartScreenProps> = ({
 
           {/* Error notification if sign-in fails */}
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <div className="leading-relaxed">
-                <strong>Sign-in notice:</strong> {errorMessage}
+            <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/90 text-amber-900 text-xs space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong>Sign-in notice:</strong>{' '}
+                  {isUnauthorizedDomain
+                    ? 'This domain is not yet added to Firebase Authorized Domains.'
+                    : errorMessage}
+                </div>
               </div>
+
+              {isUnauthorizedDomain && (
+                <div className="mt-2 pt-2 border-t border-amber-200/70 text-[11px] text-stone-700 space-y-2">
+                  <p>
+                    Google Sign-In security requires your hosting domain to be registered in Firebase Authentication.
+                  </p>
+                  <div className="flex items-center justify-between bg-white/80 border border-stone-200 rounded-md px-2.5 py-1.5 font-mono text-[11px] text-stone-800">
+                    <span className="truncate mr-2 font-semibold">{currentHostname}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyHostname}
+                      className="inline-flex items-center gap-1 text-[10px] font-sans px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded border border-stone-300 transition-colors cursor-pointer shrink-0"
+                    >
+                      {copiedDomain ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3" />
+                          <span>Copy Domain</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="pt-1 flex flex-col gap-1">
+                    <div className="text-[11px] text-stone-600">
+                      <strong>To fix:</strong>
+                      <ol className="list-decimal list-inside space-y-0.5 mt-1 ml-0.5 text-stone-600">
+                        <li>Go to Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized domains</li>
+                        <li>Click <strong>Add domain</strong> and paste <code className="bg-amber-100/80 px-1 rounded font-mono">{currentHostname}</code></li>
+                      </ol>
+                    </div>
+                    <a
+                      href="https://console.firebase.google.com/project/gen-lang-client-0609175245/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium underline"
+                    >
+                      <span>Open Firebase Console Settings</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

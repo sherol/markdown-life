@@ -92,7 +92,7 @@ export async function getVaultFolderHierarchy(): Promise<{
 }> {
   const rootId = await getOrCreateFolder(ROOT_FOLDER_NAME);
 
-  const subfolders = ['goals', 'projects', 'skills', 'notes'];
+  const subfolders = ['goals', 'projects', 'skills', 'notes', 'archive'];
   const folderMap: Record<string, string> = {};
 
   for (const sf of subfolders) {
@@ -101,6 +101,22 @@ export async function getVaultFolderHierarchy(): Promise<{
   }
 
   return { rootId, folderMap };
+}
+
+/**
+ * Resolves or creates a nested sub-directory path inside Google Drive (e.g. "goals/2026" or "projects/ai-agent")
+ */
+export async function resolveDriveFolderId(
+  folderPath: string,
+  rootId: string
+): Promise<string> {
+  if (!folderPath || folderPath === '.' || folderPath === '/') return rootId;
+  const parts = folderPath.split('/').map((s) => s.trim()).filter(Boolean);
+  let currentParentId = rootId;
+  for (const part of parts) {
+    currentParentId = await getOrCreateFolder(part, currentParentId);
+  }
+  return currentParentId;
 }
 
 /**
@@ -115,8 +131,8 @@ export async function saveFileToDrive(
 
   let resolvedFolderId = targetFolderId;
   if (!resolvedFolderId) {
-    const { folderMap, rootId } = await getVaultFolderHierarchy();
-    resolvedFolderId = folderMap[file.folder] || rootId;
+    const { rootId } = await getVaultFolderHierarchy();
+    resolvedFolderId = await resolveDriveFolderId(file.folder, rootId);
   }
 
   // Check if file already exists in this folder
@@ -180,8 +196,8 @@ export async function saveFileToDrive(
  * Deletes a file from Google Drive
  */
 export async function deleteFileFromDrive(folderName: string, fileName: string): Promise<boolean> {
-  const { folderMap, rootId } = await getVaultFolderHierarchy();
-  const folderId = folderMap[folderName] || rootId;
+  const { rootId } = await getVaultFolderHierarchy();
+  const folderId = await resolveDriveFolderId(folderName, rootId);
   const cleanName = fileName.endsWith('.md') ? fileName : `${fileName}.md`;
   const q = `name = '${cleanName}' and '${folderId}' in parents and trashed = false`;
   const searchRes = await driveFetch(`files?q=${encodeURIComponent(q)}&fields=files(id,name)`);
@@ -198,13 +214,42 @@ export async function deleteFileFromDrive(folderName: string, fileName: string):
 }
 
 /**
+ * Renames a file in Google Drive
+ */
+export async function renameFileInDrive(
+  folderName: string,
+  oldFileName: string,
+  newFileName: string
+): Promise<boolean> {
+  const { rootId } = await getVaultFolderHierarchy();
+  const folderId = await resolveDriveFolderId(folderName, rootId);
+  const cleanOldName = oldFileName.endsWith('.md') ? oldFileName : `${oldFileName}.md`;
+  const cleanNewName = newFileName.endsWith('.md') ? newFileName : `${newFileName}.md`;
+
+  const q = `name = '${cleanOldName}' and '${folderId}' in parents and trashed = false`;
+  const searchRes = await driveFetch(`files?q=${encodeURIComponent(q)}&fields=files(id,name)`);
+  const data = await searchRes.json();
+
+  if (data.files && data.files.length > 0) {
+    const fileId = data.files[0].id;
+    await driveFetch(`files/${fileId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: cleanNewName }),
+    });
+    return true;
+  }
+  return false;
+}
+
+/**
  * Saves all files from the vault into their matching Google Drive folders
  */
 export async function syncAllFilesToDrive(
   files: VaultFile[],
   onProgress?: (current: number, total: number, fileName: string) => void
 ): Promise<{ uploaded: number; updated: number }> {
-  const { folderMap, rootId } = await getVaultFolderHierarchy();
+  const { rootId } = await getVaultFolderHierarchy();
 
   let uploaded = 0;
   let updated = 0;
@@ -213,7 +258,7 @@ export async function syncAllFilesToDrive(
     const file = files[i];
     onProgress?.(i + 1, files.length, file.name);
 
-    const folderId = folderMap[file.folder] || rootId;
+    const folderId = await resolveDriveFolderId(file.folder, rootId);
     const result = await saveFileToDrive(file, folderId);
     if (result.isNew) {
       uploaded++;
@@ -226,31 +271,26 @@ export async function syncAllFilesToDrive(
 }
 
 /**
- * Imports markdown files from the Google Drive 'Markdown Life Vault' folder
+ * Imports markdown files from the Google Drive 'Markdown Life Vault' folder, including nested sub-directories
  */
 export async function importFilesFromDrive(): Promise<VaultFile[]> {
   const { folderMap, rootId } = await getVaultFolderHierarchy();
   const importedFiles: VaultFile[] = [];
-
-  const targets: { folderName: string; folderId: string }[] = [
-    ...Object.entries(folderMap).map(([folderName, folderId]) => ({ folderName, folderId })),
-    { folderName: 'notes', folderId: rootId },
-  ];
-
   const processedPaths = new Set<string>();
 
-  for (const { folderName, folderId } of targets) {
-    const q = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and (mimeType = 'text/markdown' or mimeType = 'text/plain' or name contains '.md')`;
-    const res = await driveFetch(`files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`);
-    const data = await res.json();
+  async function scanDirectory(folderId: string, relativePath: string) {
+    // 1. Scan markdown files in this directory
+    const qFiles = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder' and (mimeType = 'text/markdown' or mimeType = 'text/plain' or name contains '.md')`;
+    const resFiles = await driveFetch(`files?q=${encodeURIComponent(qFiles)}&fields=files(id,name,modifiedTime)`);
+    const dataFiles = await resFiles.json();
 
-    if (data.files && Array.isArray(data.files)) {
-      for (const item of data.files) {
+    if (dataFiles.files && Array.isArray(dataFiles.files)) {
+      for (const item of dataFiles.files) {
         try {
           const contentRes = await driveFetch(`files/${item.id}?alt=media`);
           const text = await contentRes.text();
           const cleanName = item.name.endsWith('.md') ? item.name : `${item.name}.md`;
-          const filePath = `${folderName}/${cleanName}`;
+          const filePath = relativePath ? `${relativePath}/${cleanName}` : cleanName;
 
           if (processedPaths.has(filePath)) continue;
           processedPaths.add(filePath);
@@ -261,7 +301,7 @@ export async function importFilesFromDrive(): Promise<VaultFile[]> {
             id: filePath,
             name: cleanName,
             path: filePath,
-            folder: folderName,
+            folder: relativePath || 'notes',
             content: text,
             frontmatter: parsed.frontmatter,
             createdAt: item.modifiedTime ? new Date(item.modifiedTime).getTime() : Date.now(),
@@ -272,6 +312,23 @@ export async function importFilesFromDrive(): Promise<VaultFile[]> {
         }
       }
     }
+
+    // 2. Scan child sub-directories in this directory (e.g. goals/2026, projects/my-project)
+    const qDirs = `'${folderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`;
+    const resDirs = await driveFetch(`files?q=${encodeURIComponent(qDirs)}&fields=files(id,name)`);
+    const dataDirs = await resDirs.json();
+
+    if (dataDirs.files && Array.isArray(dataDirs.files)) {
+      for (const subDir of dataDirs.files) {
+        const nextRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name;
+        await scanDirectory(subDir.id, nextRelativePath);
+      }
+    }
+  }
+
+  // Scan each top-level vault folder
+  for (const [topName, topId] of Object.entries(folderMap)) {
+    await scanDirectory(topId, topName);
   }
 
   return importedFiles;

@@ -11,8 +11,8 @@ interface RawInitialFile {
 const rawFiles: RawInitialFile[] = [
   // --- GOALS ---
   {
-    path: 'goals/ai-systems-mastery.md',
-    folder: 'goals',
+    path: 'goals/2026/ai-systems-mastery.md',
+    folder: 'goals/2026',
     name: 'ai-systems-mastery.md',
     content: `---
 title: AI Systems Mastery & Agent Architecture
@@ -56,8 +56,8 @@ Q3 checkpoint demonstrated reliable tool calling using standard schema validatio
 `
   },
   {
-    path: 'goals/endurance-vitality.md',
-    folder: 'goals',
+    path: 'goals/2026/endurance-vitality.md',
+    folder: 'goals/2026',
     name: 'endurance-vitality.md',
     content: `---
 title: Peak Physical Endurance & Vitality
@@ -93,8 +93,8 @@ Build a durable, high-energy physical vessel through disciplined cardiovascular 
 `
   },
   {
-    path: 'goals/financial-independence-engine.md',
-    folder: 'goals',
+    path: 'goals/2027/financial-independence-engine.md',
+    folder: 'goals/2027',
     name: 'financial-independence-engine.md',
     content: `---
 title: Financial Autonomy & Capital Allocation
@@ -128,8 +128,8 @@ Optimize savings rate to 50%+ through intentional living, maintain low-cost dive
 
   // --- PROJECTS ---
   {
-    path: 'projects/autonomous-research-agent.md',
-    folder: 'projects',
+    path: 'projects/autonomous-research-agent/autonomous-research-agent.md',
+    folder: 'projects/autonomous-research-agent',
     name: 'autonomous-research-agent.md',
     content: `---
 title: Autonomous Research Agent Engine
@@ -173,8 +173,8 @@ Develop a modular agent workflow that accepts a research topic query, searches a
 `
   },
   {
-    path: 'projects/half-marathon-sub-1h45.md',
-    folder: 'projects',
+    path: 'projects/half-marathon-sub-1h45/half-marathon-sub-1h45.md',
+    folder: 'projects/half-marathon-sub-1h45',
     name: 'half-marathon-sub-1h45.md',
     content: `---
 title: Autumn Half Marathon Sub 1h 45m
@@ -213,8 +213,8 @@ Finish the 21.1 km course in 1 hour 44 minutes 59 seconds or faster (requires st
 `
   },
   {
-    path: 'projects/second-brain-pkm.md',
-    folder: 'projects',
+    path: 'projects/second-brain-pkm/second-brain-pkm.md',
+    folder: 'projects/second-brain-pkm',
     name: 'second-brain-pkm.md',
     content: `---
 title: Markdown Second Brain & Vault Architecture
@@ -462,6 +462,40 @@ tags:
 
 ## 3. Run Agent Planner
 - Trigger \`@deep-work-planner\` with upcoming week's calendar constraints.
+`
+  },
+
+  // --- ARCHIVE ---
+  {
+    path: 'archive/2025-annual-retrospective.md',
+    folder: 'archive',
+    name: '2025-annual-retrospective.md',
+    content: `---
+title: 2025 Annual Retrospective & Legacy Archive
+category: archive
+status: archived
+archived_at: 2025-12-31
+tags:
+  - retrospective
+  - archive
+  - legacy
+---
+
+# 📦 2025 Annual Retrospective & Legacy Archive
+
+Archived on: 2025-12-31
+
+## Final Status Summary
+All 2025 annual targets completed and preserved into cold storage. Foundational architecture for the markdown knowledge vault established.
+
+## Completed Milestones
+- [x] Initialized personal markdown vault architecture and bi-directional Drive synchronization
+- [x] Deployed first autonomous LLM research pipelines
+- [x] Completed 1,200 km cumulative annual running volume
+
+## Retrospective Lessons
+- Prioritize deterministic frontmatter schemas over freeform tags.
+- Keep weekly reviews sacred to prevent goal drift.
 `
   }
 ];

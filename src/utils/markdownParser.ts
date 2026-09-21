@@ -179,11 +179,49 @@ export function toggleCheckboxInMarkdown(markdown: string, taskIndex: number): s
 export function extractWikiLinks(markdown: string): string[] {
   const wikiRegex = /\[\[(.*?)\]\]/g;
   const links: string[] = [];
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = wikiRegex.exec(markdown)) !== null) {
     if (match[1].trim() && !links.includes(match[1].trim())) {
       links.push(match[1].trim());
     }
   }
   return links;
+}
+
+/**
+ * Updates wiki-links in markdown content when a file is renamed.
+ * Supports [[fileName]], [[fileName.md]], [[fileName|Alias]], [[folder/fileName]] etc.
+ */
+export function updateWikiLinks(
+  markdown: string,
+  oldFileName: string,
+  newFileName: string
+): string {
+  const oldBase = oldFileName.replace(/\.md$/, '');
+  const newBase = newFileName.replace(/\.md$/, '');
+  const oldMd = oldFileName.endsWith('.md') ? oldFileName : `${oldFileName}.md`;
+  const newMd = newFileName.endsWith('.md') ? newFileName : `${newFileName}.md`;
+
+  return markdown.replace(/\[\[(.*?)\]\]/g, (fullMatch, inner) => {
+    const parts = inner.split('|');
+    const target = parts[0].trim();
+    const alias = parts.length > 1 ? `|${parts.slice(1).join('|')}` : '';
+
+    if (target === oldBase) {
+      return `[[${newBase}${alias}]]`;
+    }
+    if (target === oldMd) {
+      return `[[${newMd}${alias}]]`;
+    }
+    if (target.endsWith(`/${oldBase}`)) {
+      const prefix = target.slice(0, target.length - oldBase.length);
+      return `[[${prefix}${newBase}${alias}]]`;
+    }
+    if (target.endsWith(`/${oldMd}`)) {
+      const prefix = target.slice(0, target.length - oldMd.length);
+      return `[[${prefix}${newMd}${alias}]]`;
+    }
+
+    return fullMatch;
+  });
 }

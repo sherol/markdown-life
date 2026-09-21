@@ -11,8 +11,11 @@ Manage your goals, projects, agent skill templates, and interconnected notes in 
 - **Google Drive Storage**: Uses your personal Google Drive (`/Markdown Life Vault/`) as the authoritative storage backend. No proprietary database or cloud lock-in.
 - **Bi-Directional Drive Sync**:
   - Automatically debounce-syncs edits in real-time.
-  - Creates, duplicates, and deletes files directly within your Google Drive hierarchy.
+  - Creates, renames, duplicates, and deletes files directly within your Google Drive hierarchy.
   - One-click "Refresh from Drive" and "Initialize Starter Templates".
+- **File Management & Renaming**:
+  - Rename `.md` files right in the sidebar or directly inside the editor pane.
+  - Automatically updates any `[[wiki-links]]` referencing the renamed file across the entire vault.
 - **Structured Life Matrix**:
   - Connect **Goals** 🎯 to **Projects** 🚀, **Agent Skills** 🤖, and **Notes** 📝 with YAML frontmatter metadata and `[[wiki-links]]`.
   - Visual status chips, priority tracking, target quarters, and task completion metrics.

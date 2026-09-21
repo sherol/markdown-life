@@ -199,6 +199,27 @@ Respond strictly in structured markdown format with clear headings and verified 
 `
       );
 
+    case 'archive':
+      return stringifyWithFrontmatter(
+        {
+          title,
+          category: 'archive',
+          status: 'archived',
+          archived_at: today,
+          tags: ['archive'],
+        },
+        `# 📦 ${title} (Archived)
+
+Archived Date: ${today}
+
+## Retrospective & Final Status
+Summarize the outcomes, lessons learned, or reason for preservation.
+
+## Preserved Notes & Historical Deliverables
+- Key accomplishment or retrospective artifact
+`
+      );
+
     case 'notes':
     default:
       return stringifyWithFrontmatter(

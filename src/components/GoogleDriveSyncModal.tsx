@@ -11,6 +11,7 @@ import {
   FolderCheck,
   Loader2,
   Lock,
+  ExternalLink,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { VaultFile } from '../types';
@@ -144,7 +145,7 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
           {/* Status Message */}
           {statusMessage && (
             <div
-              className={`p-3 rounded-xl border flex items-start gap-2.5 ${
+              className={`p-3 rounded-xl border flex flex-col gap-2 ${
                 statusMessage.type === 'success'
                   ? isDarkMode
                     ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
@@ -154,12 +155,30 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                   : 'bg-red-50 border-red-200 text-red-800'
               }`}
             >
-              {statusMessage.type === 'success' ? (
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5">
+                {statusMessage.type === 'success' ? (
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                )}
+                <span className="leading-relaxed font-medium">{statusMessage.text}</span>
+              </div>
+              {statusMessage.text.includes('unauthorized-domain') && typeof window !== 'undefined' && (
+                <div className="text-[11px] pt-1.5 border-t border-red-200 dark:border-red-800/60 space-y-1">
+                  <div>
+                    Domain <code className="font-mono bg-red-100 dark:bg-red-900/60 px-1 py-0.5 rounded">{window.location.hostname}</code> must be authorized in Firebase.
+                  </div>
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0609175245/authentication/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                  >
+                    Open Firebase Console Settings &rarr; Authorized Domains
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               )}
-              <span className="leading-relaxed">{statusMessage.text}</span>
             </div>
           )}
 

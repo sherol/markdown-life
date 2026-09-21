@@ -27,9 +27,15 @@ export const LifeMatrixView: React.FC<LifeMatrixViewProps> = ({
   onOpenSkillPlayground,
   onQuickNewFileInFolder,
 }) => {
-  const goals = files.filter((f) => f.folder === 'goals');
-  const projects = files.filter((f) => f.folder === 'projects');
-  const skills = files.filter((f) => f.folder === 'skills');
+  const goals = files.filter(
+    (f) => f.folder === 'goals' || f.folder.startsWith('goals/') || f.frontmatter.category === 'goals'
+  );
+  const projects = files.filter(
+    (f) => f.folder === 'projects' || f.folder.startsWith('projects/') || f.frontmatter.category === 'projects'
+  );
+  const skills = files.filter(
+    (f) => f.folder === 'skills' || f.folder.startsWith('skills/') || f.frontmatter.category === 'skills'
+  );
 
   return (
     <div className="flex-1 overflow-y-auto bg-stone-50/50 p-6 md:p-8">

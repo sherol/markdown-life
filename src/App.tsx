@@ -8,11 +8,12 @@ import { User } from 'firebase/auth';
 import { HardDrive, Plus, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { VaultFile, ActiveTab, FileCategory } from './types';
 import { loadVaultFiles, saveVaultFiles, getTemplateForCategory } from './utils/storage';
-import { parseFrontmatter, toggleCheckboxInMarkdown } from './utils/markdownParser';
+import { parseFrontmatter, toggleCheckboxInMarkdown, updateWikiLinks } from './utils/markdownParser';
 import { initAuth, googleSignIn, logout } from './utils/googleAuth';
 import {
   saveFileToDrive,
   deleteFileFromDrive,
+  renameFileInDrive,
   getVaultFolderHierarchy,
   importFilesFromDrive,
   syncAllFilesToDrive,
@@ -205,9 +206,18 @@ export default function App() {
 
   // Create new file
   const handleCreateFile = async (folder: string, filename: string, title: string) => {
-    const category: FileCategory = ['goals', 'projects', 'skills', 'notes'].includes(folder)
-      ? (folder as FileCategory)
-      : 'custom';
+    const category: FileCategory =
+      folder === 'goals' || folder.startsWith('goals/')
+        ? 'goals'
+        : folder === 'projects' || folder.startsWith('projects/')
+        ? 'projects'
+        : folder === 'skills' || folder.startsWith('skills/')
+        ? 'skills'
+        : folder === 'notes' || folder.startsWith('notes/')
+        ? 'notes'
+        : folder === 'archive' || folder.startsWith('archive/')
+        ? 'archive'
+        : 'custom';
 
     const content = getTemplateForCategory(category, title);
     const { frontmatter } = parseFrontmatter(content);
@@ -281,6 +291,120 @@ export default function App() {
       const remaining = files.filter((f) => f.id !== id);
       setSelectedFileId(remaining[0]?.id || null);
     }
+  };
+
+  // Rename file
+  const handleRenameFile = async (id: string, rawNewName: string): Promise<boolean> => {
+    const fileToRename = files.find((f) => f.id === id);
+    if (!fileToRename) return false;
+
+    // Sanitize filename
+    let cleanName = rawNewName.trim().replace(/[/\\]/g, '');
+    if (!cleanName) return false;
+    if (!cleanName.endsWith('.md')) {
+      cleanName = `${cleanName}.md`;
+    }
+
+    // If identical, no-op
+    if (cleanName === fileToRename.name) {
+      return true;
+    }
+
+    // Check collision in same folder
+    const collision = files.find(
+      (f) =>
+        f.folder === fileToRename.folder &&
+        f.name.toLowerCase() === cleanName.toLowerCase() &&
+        f.id !== id
+    );
+    if (collision) {
+      setToastNotification({
+        type: 'error',
+        text: `A file named "${cleanName}" already exists in /${fileToRename.folder}.`,
+      });
+      return false;
+    }
+
+    const oldName = fileToRename.name;
+    const newPath = `${fileToRename.folder}/${cleanName}`;
+    const newId = newPath;
+
+    const renamedFile: VaultFile = {
+      ...fileToRename,
+      id: newId,
+      name: cleanName,
+      path: newPath,
+      updatedAt: Date.now(),
+    };
+
+    if (googleUser) {
+      try {
+        const renamed = await renameFileInDrive(fileToRename.folder, oldName, cleanName);
+        if (!renamed) {
+          // If PATCH failed to locate the old file, save as new and delete old
+          await saveFileToDrive(renamedFile);
+          await deleteFileFromDrive(fileToRename.folder, oldName);
+        }
+        setToastNotification({
+          type: 'success',
+          text: `Renamed to "${cleanName}" in Google Drive!`,
+        });
+      } catch (err: any) {
+        console.error('Failed to rename file in Google Drive:', err);
+        setToastNotification({
+          type: 'error',
+          text: `Failed to rename in Google Drive: ${err?.message}`,
+        });
+        return false;
+      }
+    } else {
+      setToastNotification({
+        type: 'success',
+        text: `Renamed to "${cleanName}".`,
+      });
+    }
+
+    // Update the file and update any [[wiki-links]] referencing the old file in all other files
+    const filesToSync: VaultFile[] = [];
+    setFiles((prev) =>
+      prev.map((f) => {
+        if (f.id === id) {
+          return renamedFile;
+        }
+
+        const updatedContent = updateWikiLinks(f.content, oldName, cleanName);
+        if (updatedContent !== f.content) {
+          const updatedFile: VaultFile = {
+            ...f,
+            content: updatedContent,
+            updatedAt: Date.now(),
+          };
+          if (googleUser) {
+            filesToSync.push(updatedFile);
+          }
+          return updatedFile;
+        }
+
+        return f;
+      })
+    );
+
+    // If other files had wiki-links updated and user is connected to Drive, sync them
+    if (googleUser && filesToSync.length > 0) {
+      for (const updatedF of filesToSync) {
+        try {
+          await saveFileToDrive(updatedF);
+        } catch (err) {
+          console.error(`Failed to update wiki-links in Drive file ${updatedF.name}:`, err);
+        }
+      }
+    }
+
+    if (selectedFileId === id) {
+      setSelectedFileId(newId);
+    }
+
+    return true;
   };
 
   // Duplicate file
@@ -557,6 +681,7 @@ export default function App() {
               onSelectFile={(id) => setSelectedFileId(id)}
               onDeleteFile={handleDeleteFile}
               onDuplicateFile={handleDuplicateFile}
+              onRenameFile={handleRenameFile}
               onQuickNewFileInFolder={handleOpenNewFileInFolder}
               onDropFiles={handleImportFiles}
             />
@@ -629,6 +754,7 @@ export default function App() {
                 onNavigateToFile={handleNavigateToFile}
                 onToggleCheckbox={handleToggleCheckbox}
                 onOpenSkillPlayground={(s) => setSkillForPlayground(s)}
+                onRenameFile={handleRenameFile}
                 onSaveToDrive={handleRequestSaveFileToDrive}
                 isSavingToDrive={isSavingSingleFileToDrive}
                 isDriveSyncing={isDriveSyncing}

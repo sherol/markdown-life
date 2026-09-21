@@ -52,9 +52,18 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Compute vault stats
-  const goalsCount = files.filter((f) => f.folder === 'goals').length;
-  const projectsCount = files.filter((f) => f.folder === 'projects').length;
-  const skillsCount = files.filter((f) => f.folder === 'skills').length;
+  const goalsCount = files.filter(
+    (f) => f.folder === 'goals' || f.folder.startsWith('goals/') || f.frontmatter.category === 'goals'
+  ).length;
+  const projectsCount = files.filter(
+    (f) => f.folder === 'projects' || f.folder.startsWith('projects/') || f.frontmatter.category === 'projects'
+  ).length;
+  const skillsCount = files.filter(
+    (f) => f.folder === 'skills' || f.folder.startsWith('skills/') || f.frontmatter.category === 'skills'
+  ).length;
+  const archiveCount = files.filter(
+    (f) => f.folder === 'archive' || f.folder.startsWith('archive/') || f.frontmatter.category === 'archive'
+  ).length;
 
   let totalTasks = 0;
   let completedTasks = 0;
@@ -123,6 +132,15 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
                 <CheckCircle2 className="w-3.5 h-3.5 text-stone-600" />
                 <strong className="text-stone-800 font-semibold">{completedTasks}/{totalTasks}</strong> Tasks ({taskPct}%)
               </span>
+              {archiveCount > 0 && (
+                <>
+                  <span className="text-stone-300">•</span>
+                  <span className="inline-flex items-center gap-1 text-stone-400">
+                    <FolderArchive className="w-3.5 h-3.5 text-stone-400" />
+                    <strong className="text-stone-600 font-semibold">{archiveCount}</strong> Archived
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

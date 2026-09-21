@@ -15,6 +15,12 @@ import {
   ChevronDown,
   CheckCircle,
   Tag,
+  Pencil,
+  Check,
+  X,
+  Archive,
+  Calendar,
+  FolderPlus,
 } from 'lucide-react';
 import { VaultFile, FileCategory } from '../types';
 import { getTaskProgress } from '../utils/markdownParser';
@@ -26,6 +32,7 @@ interface VaultSidebarProps {
   onSelectFile: (id: string) => void;
   onDeleteFile: (id: string) => void;
   onDuplicateFile: (file: VaultFile) => void;
+  onRenameFile: (id: string, newFileName: string) => Promise<boolean> | boolean;
   onQuickNewFileInFolder: (folder: string) => void;
   onDropFiles: (fileList: FileList) => void;
 }
@@ -36,18 +43,43 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
   onSelectFile,
   onDeleteFile,
   onDuplicateFile,
+  onRenameFile,
   onQuickNewFileInFolder,
   onDropFiles,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'all' | FileCategory>('all');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [collapsedSubfolders, setCollapsedSubfolders] = useState<Record<string, boolean>>({});
   const [isDragOver, setIsDragOver] = useState(false);
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingFileName, setEditingFileName] = useState('');
 
-  // Group files by folder, ensuring standard vault folders always appear
-  const defaultFolders = ['goals', 'projects', 'skills', 'notes'];
-  const fileFolders = files.map((f) => f.folder || 'notes');
-  const folders = Array.from(new Set([...defaultFolders, ...fileFolders])).sort();
+  // Inline prompt states for adding new year / project subfolders directly
+  const [isAddingYear, setIsAddingYear] = useState(false);
+  const [newYearValue, setNewYearValue] = useState(new Date().getFullYear().toString());
+  const [isAddingProject, setIsAddingProject] = useState(false);
+  const [newProjectValue, setNewProjectValue] = useState('');
+
+  const startRenaming = (file: VaultFile) => {
+    setEditingFileId(file.id);
+    setEditingFileName(file.name.replace(/\.md$/, ''));
+  };
+
+  const handleConfirmRename = async (fileId: string) => {
+    const trimmed = editingFileName.trim();
+    if (!trimmed) {
+      setEditingFileId(null);
+      return;
+    }
+    await onRenameFile(fileId, trimmed);
+    setEditingFileId(null);
+  };
+
+  const handleCancelRename = () => {
+    setEditingFileId(null);
+    setEditingFileName('');
+  };
 
   const toggleFolder = (folder: string) => {
     setCollapsedFolders((prev) => ({
@@ -56,10 +88,63 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
     }));
   };
 
+  const toggleSubfolder = (subfolderKey: string) => {
+    setCollapsedSubfolders((prev) => ({
+      ...prev,
+      [subfolderKey]: !prev[subfolderKey],
+    }));
+  };
+
+  // Top-level categories ordered strictly:
+  // 1. Goals & OKRs
+  // 2. Projects & Initiatives
+  // 3. Agent Skills
+  // 4. Notes & Rituals
+  // 5. Archive
+  const standardFolders = ['goals', 'projects', 'skills', 'notes', 'archive'];
+  const folderOrder: Record<string, number> = {
+    goals: 1,
+    projects: 2,
+    skills: 3,
+    notes: 4,
+    archive: 5,
+  };
+
+  // Find any other custom top-level folders
+  const allTopFolders = Array.from(
+    new Set([
+      ...standardFolders,
+      ...files.map((f) => (f.folder ? f.folder.split('/')[0] : 'notes')),
+    ])
+  );
+
+  const folders = allTopFolders.sort((a, b) => {
+    const orderA = folderOrder[a] ?? 50;
+    const orderB = folderOrder[b] ?? 50;
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    return a.localeCompare(b);
+  });
+
+  // Helper to determine which top-level category a file belongs to
+  const getTopLevelCategory = (file: VaultFile): string => {
+    if (file.folder) {
+      const top = file.folder.split('/')[0];
+      return top;
+    }
+    if (file.frontmatter.category) {
+      return file.frontmatter.category;
+    }
+    return 'notes';
+  };
+
   // Filtered files
   const filteredFiles = files.filter((file) => {
+    const fileCategory = getTopLevelCategory(file);
     const matchesCategory =
       activeCategoryFilter === 'all' ||
+      fileCategory === activeCategoryFilter ||
       file.folder === activeCategoryFilter ||
       file.frontmatter.category === activeCategoryFilter;
 
@@ -76,13 +161,16 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
   });
 
   const getCategoryIcon = (folder: string) => {
-    switch (folder) {
+    const top = folder.split('/')[0];
+    switch (top) {
       case 'goals':
         return <Target className="w-3.5 h-3.5 text-amber-600 shrink-0" />;
       case 'projects':
         return <Rocket className="w-3.5 h-3.5 text-blue-600 shrink-0" />;
       case 'skills':
         return <Bot className="w-3.5 h-3.5 text-emerald-600 shrink-0" />;
+      case 'archive':
+        return <Archive className="w-3.5 h-3.5 text-purple-600 shrink-0" />;
       case 'notes':
       default:
         return <FileText className="w-3.5 h-3.5 text-stone-500 shrink-0" />;
@@ -99,6 +187,8 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
         return 'Agent Skills';
       case 'notes':
         return 'Notes & Rituals';
+      case 'archive':
+        return 'Archive';
       default:
         return folder.charAt(0).toUpperCase() + folder.slice(1);
     }
@@ -121,36 +211,238 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
     }
   };
 
+  const handleCreateNewYear = () => {
+    const yr = newYearValue.trim();
+    if (!yr) return;
+    onQuickNewFileInFolder(`goals/${yr}`);
+    setIsAddingYear(false);
+  };
+
+  const handleCreateNewProject = () => {
+    const clean = newProjectValue
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (!clean) return;
+    onQuickNewFileInFolder(`projects/${clean}`);
+    setIsAddingProject(false);
+    setNewProjectValue('');
+  };
+
+  // Helper to render a file item
+  const renderFileItem = (file: VaultFile, indent = false) => {
+    const isSelected = file.id === selectedFileId;
+    const progress = getTaskProgress(file.content);
+    const title = file.frontmatter.title || file.name.replace(/\.md$/, '');
+    const status = file.frontmatter.status;
+    const isEditing = file.id === editingFileId;
+
+    if (isEditing) {
+      return (
+        <div
+          key={file.id}
+          className={`p-1.5 bg-white border border-stone-300 rounded-md shadow-xs my-0.5 ${
+            indent ? 'ml-3' : ''
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-mono text-stone-400 pl-1 shrink-0 truncate max-w-[100px]">
+              /{file.folder}/
+            </span>
+            <input
+              type="text"
+              value={editingFileName}
+              onChange={(e) => setEditingFileName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleConfirmRename(file.id);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleCancelRename();
+                }
+              }}
+              autoFocus
+              placeholder="filename"
+              className="flex-1 text-xs font-mono py-0.5 px-1.5 bg-stone-50 border border-stone-200 rounded text-stone-900 focus:outline-hidden focus:border-stone-500 focus:bg-white min-w-0"
+            />
+            <span className="text-[10px] font-mono text-stone-400 shrink-0">.md</span>
+            <button
+              type="button"
+              title="Save filename"
+              onClick={() => handleConfirmRename(file.id)}
+              className="p-1 hover:bg-emerald-50 text-emerald-600 rounded transition-colors cursor-pointer shrink-0"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Cancel"
+              onClick={handleCancelRename}
+              className="p-1 hover:bg-stone-100 text-stone-400 hover:text-stone-600 rounded transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={file.id}
+        className={`group/item flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition-all ${
+          indent ? 'ml-3' : ''
+        } ${
+          isSelected
+            ? 'bg-stone-900 text-white font-medium shadow-xs'
+            : 'text-stone-700 hover:bg-stone-200/70'
+        }`}
+        onClick={() => onSelectFile(file.id)}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className={isSelected ? 'text-white' : ''}>
+            {getCategoryIcon(file.folder)}
+          </span>
+
+          <div className="truncate flex-1">
+            <span className="truncate block text-xs">{title}</span>
+            <span
+              className={`text-[10px] block truncate font-mono ${
+                isSelected ? 'text-stone-300' : 'text-stone-400'
+              }`}
+            >
+              {file.name}
+            </span>
+          </div>
+        </div>
+
+        {/* Meta pill or action buttons */}
+        <div className="flex items-center gap-1 shrink-0 ml-1.5">
+          {/* Task Progress Badge */}
+          {progress.total > 0 && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-0.5 ${
+                isSelected
+                  ? 'bg-stone-800 text-stone-200'
+                  : progress.completed === progress.total
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-stone-100 text-stone-600'
+              }`}
+            >
+              <CheckCircle className="w-2.5 h-2.5" />
+              {progress.completed}/{progress.total}
+            </span>
+          )}
+
+          {/* Status Indicator */}
+          {status && progress.total === 0 && (
+            <span
+              className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${
+                isSelected
+                  ? 'bg-stone-800 text-stone-200'
+                  : status === 'active' || status === 'in-progress'
+                  ? 'bg-amber-100 text-amber-800'
+                  : status === 'archived'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-stone-100 text-stone-600'
+              }`}
+            >
+              {status}
+            </span>
+          )}
+
+          {/* Hover Actions */}
+          <div className="hidden group-hover/item:flex items-center gap-0.5">
+            <button
+              type="button"
+              title="Rename file"
+              onClick={(e) => {
+                e.stopPropagation();
+                startRenaming(file);
+              }}
+              className={`p-1 rounded cursor-pointer ${
+                isSelected
+                  ? 'hover:bg-stone-800 text-stone-300'
+                  : 'hover:bg-stone-300 text-stone-500'
+              }`}
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              title="Duplicate file"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicateFile(file);
+              }}
+              className={`p-1 rounded cursor-pointer ${
+                isSelected
+                  ? 'hover:bg-stone-800 text-stone-300'
+                  : 'hover:bg-stone-300 text-stone-500'
+              }`}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              title="Download .md file"
+              onClick={(e) => {
+                e.stopPropagation();
+                exportSingleFile(file);
+              }}
+              className={`p-1 rounded cursor-pointer ${
+                isSelected
+                  ? 'hover:bg-stone-800 text-stone-300'
+                  : 'hover:bg-stone-300 text-stone-500'
+              }`}
+            >
+              <Download className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              title="Delete file"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteFile(file.id);
+              }}
+              className={`p-1 rounded cursor-pointer ${
+                isSelected
+                  ? 'hover:bg-red-900 text-red-200'
+                  : 'hover:bg-red-100 text-red-600'
+              }`}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <aside
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`w-full md:w-80 lg:w-88 border-r border-stone-200 bg-stone-50/60 flex flex-col shrink-0 h-full select-none ${
-        isDragOver ? 'ring-2 ring-stone-900 bg-stone-100' : ''
+      className={`w-72 md:w-80 flex-shrink-0 bg-stone-50 border-r border-stone-200 flex flex-col h-[calc(100vh-61px)] transition-colors select-none ${
+        isDragOver ? 'bg-amber-50/50 border-amber-300' : ''
       }`}
     >
-      {/* Top Search Bar */}
+      {/* Search & Filter Header */}
       <div className="p-3 border-b border-stone-200 bg-white">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
           <input
             type="text"
-            id="vault-search-input"
+            id="input-search-files"
+            placeholder="Search vault, tags, content..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files, tags, or content..."
-            className="w-full text-xs pl-8 pr-3 py-1.5 bg-stone-100 hover:bg-stone-150 focus:bg-white rounded-lg border border-transparent focus:border-stone-300 focus:outline-hidden transition-all text-stone-900 placeholder:text-stone-400"
+            className="w-full pl-8 pr-3 py-1.5 bg-stone-100 hover:bg-stone-100/80 focus:bg-white border border-stone-200 rounded-lg text-xs text-stone-900 placeholder:text-stone-400 focus:outline-hidden focus:border-stone-400 transition-colors font-sans"
           />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-stone-700"
-            >
-              ×
-            </button>
-          )}
         </div>
 
         {/* Filter Pills */}
@@ -162,12 +454,13 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
               { id: 'projects', label: 'Projects' },
               { id: 'skills', label: 'Skills' },
               { id: 'notes', label: 'Notes' },
+              { id: 'archive', label: 'Archive' },
             ] as const
           ).map((tab) => {
             const count =
               tab.id === 'all'
                 ? files.length
-                : files.filter((f) => f.folder === tab.id).length;
+                : files.filter((f) => getTopLevelCategory(f) === tab.id).length;
             const isSelected = activeCategoryFilter === tab.id;
             return (
               <button
@@ -175,7 +468,7 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                 type="button"
                 id={`filter-${tab.id}`}
                 onClick={() => setActiveCategoryFilter(tab.id)}
-                className={`px-2 py-0.5 rounded-full whitespace-nowrap font-medium transition-colors ${
+                className={`px-2 py-0.5 rounded-full whitespace-nowrap font-medium transition-colors cursor-pointer ${
                   isSelected
                     ? 'bg-stone-900 text-white'
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
@@ -197,13 +490,353 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
         )}
 
         {folders.map((folder) => {
-          const folderFiles = filteredFiles.filter((f) => f.folder === folder);
-          if (folderFiles.length === 0 && activeCategoryFilter !== 'all' && activeCategoryFilter !== folder) {
+          // Files that belong under this top-level folder
+          const folderFiles = filteredFiles.filter((f) => getTopLevelCategory(f) === folder);
+
+          // If filtering by activeCategoryFilter and not matching, hide
+          if (
+            folderFiles.length === 0 &&
+            activeCategoryFilter !== 'all' &&
+            activeCategoryFilter !== folder
+          ) {
             return null;
           }
 
-          const isCollapsed = !!collapsedFolders[folder];
+          const isCollapsed = !!collapsedFolders[folder] && !searchQuery.trim();
 
+          // Specialized handling for Goals (Year Sub-directories)
+          if (folder === 'goals') {
+            // Find distinct years
+            const distinctYears = Array.from(
+              new Set(
+                folderFiles
+                  .filter((f) => f.folder.startsWith('goals/'))
+                  .map((f) => f.folder.replace('goals/', '').split('/')[0])
+                  .filter(Boolean)
+              )
+            ).sort((a, b) => b.localeCompare(a));
+
+            // Any goals not in a year subfolder
+            const rootGoalFiles = folderFiles.filter((f) => f.folder === 'goals');
+
+            return (
+              <div key={folder} className="space-y-0.5">
+                {/* Folder Header */}
+                <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-stone-100/80 group">
+                  <button
+                    type="button"
+                    id={`folder-btn-${folder}`}
+                    onClick={() => toggleFolder(folder)}
+                    className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                    )}
+                    {isCollapsed ? (
+                      <Folder className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
+                    )}
+                    <span>{getFolderLabel(folder)}</span>
+                    <span className="text-[10px] font-normal text-stone-400 lowercase font-mono ml-0.5">
+                      ({folderFiles.length})
+                    </span>
+                  </button>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      title="Add Year sub-directory"
+                      onClick={() => setIsAddingYear(true)}
+                      className="text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      Year
+                    </button>
+                    <button
+                      type="button"
+                      id={`quick-add-${folder}`}
+                      onClick={() => onQuickNewFileInFolder(distinctYears[0] ? `goals/${distinctYears[0]}` : 'goals/2026')}
+                      title="Quick new goal"
+                      className="p-1 hover:bg-stone-200 rounded text-stone-500 hover:text-stone-800 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-directories and Files */}
+                {!isCollapsed && (
+                  <div className="space-y-1 pt-0.5 pl-1.5">
+                    {/* Inline Year creation input */}
+                    {isAddingYear && (
+                      <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg ml-3 my-1">
+                        <span className="text-[10px] font-semibold text-amber-900 block mb-1">
+                          New Year Sub-Directory:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={newYearValue}
+                            onChange={(e) => setNewYearValue(e.target.value)}
+                            placeholder="e.g. 2028"
+                            autoFocus
+                            className="flex-1 p-1 bg-white border border-amber-300 rounded text-xs font-mono text-stone-900"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCreateNewYear();
+                              if (e.key === 'Escape') setIsAddingYear(false);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateNewYear}
+                            className="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-medium cursor-pointer"
+                          >
+                            Create
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingYear(false)}
+                            className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Year Sub-directories */}
+                    {distinctYears.map((year) => {
+                      const yearKey = `goals/${year}`;
+                      const isYearCollapsed = !!collapsedSubfolders[yearKey] && !searchQuery.trim();
+                      const yearFiles = folderFiles.filter((f) => f.folder === yearKey);
+
+                      return (
+                        <div key={yearKey} className="ml-2 border-l border-amber-200/60 pl-1.5 space-y-0.5">
+                          {/* Year Sub-directory Header */}
+                          <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-amber-50/60 group/year">
+                            <button
+                              type="button"
+                              onClick={() => toggleSubfolder(yearKey)}
+                              className="flex items-center gap-1.5 font-medium text-xs text-stone-700 hover:text-stone-900 cursor-pointer"
+                            >
+                              {isYearCollapsed ? (
+                                <ChevronRight className="w-3 h-3 text-stone-400" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 text-stone-400" />
+                              )}
+                              <Calendar className="w-3 h-3 text-amber-600" />
+                              <span className="font-mono font-semibold">{year}</span>
+                              <span className="text-[10px] text-stone-400 font-mono">
+                                ({yearFiles.length})
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onQuickNewFileInFolder(yearKey)}
+                              title={`Add new goal to ${year}`}
+                              className="p-0.5 opacity-0 group-hover/year:opacity-100 hover:bg-amber-100 text-amber-800 rounded cursor-pointer transition-opacity"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Year Files */}
+                          {!isYearCollapsed && (
+                            <div className="space-y-0.5">
+                              {yearFiles.map((file) => renderFileItem(file, true))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Root Goals if any */}
+                    {rootGoalFiles.length > 0 && (
+                      <div className="space-y-0.5 pt-1">
+                        {rootGoalFiles.map((file) => renderFileItem(file, true))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Specialized handling for Projects (Sub-directory per project)
+          if (folder === 'projects') {
+            // Find distinct project sub-directories
+            const distinctProjects = Array.from(
+              new Set(
+                folderFiles
+                  .filter((f) => f.folder.startsWith('projects/'))
+                  .map((f) => f.folder.replace('projects/', '').split('/')[0])
+                  .filter(Boolean)
+              )
+            ).sort((a, b) => a.localeCompare(b));
+
+            // Any project files in root projects folder
+            const rootProjectFiles = folderFiles.filter((f) => f.folder === 'projects');
+
+            return (
+              <div key={folder} className="space-y-0.5">
+                {/* Folder Header */}
+                <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-stone-100/80 group">
+                  <button
+                    type="button"
+                    id={`folder-btn-${folder}`}
+                    onClick={() => toggleFolder(folder)}
+                    className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                    )}
+                    {isCollapsed ? (
+                      <Folder className="w-3.5 h-3.5 text-blue-500" />
+                    ) : (
+                      <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
+                    )}
+                    <span>{getFolderLabel(folder)}</span>
+                    <span className="text-[10px] font-normal text-stone-400 lowercase font-mono ml-0.5">
+                      ({folderFiles.length})
+                    </span>
+                  </button>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      title="Add Project sub-directory"
+                      onClick={() => setIsAddingProject(true)}
+                      className="text-[10px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      Project
+                    </button>
+                    <button
+                      type="button"
+                      id={`quick-add-${folder}`}
+                      onClick={() => onQuickNewFileInFolder(distinctProjects[0] ? `projects/${distinctProjects[0]}` : 'projects/new-project')}
+                      title="Quick new project file"
+                      className="p-1 hover:bg-stone-200 rounded text-stone-500 hover:text-stone-800 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-directories and Files */}
+                {!isCollapsed && (
+                  <div className="space-y-1 pt-0.5 pl-1.5">
+                    {/* Inline Project creation input */}
+                    {isAddingProject && (
+                      <div className="p-2 bg-blue-50/80 border border-blue-200 rounded-lg ml-3 my-1">
+                        <span className="text-[10px] font-semibold text-blue-900 block mb-1">
+                          New Project Sub-Directory:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={newProjectValue}
+                            onChange={(e) => setNewProjectValue(e.target.value)}
+                            placeholder="e.g. cloud-migration"
+                            autoFocus
+                            className="flex-1 p-1 bg-white border border-blue-300 rounded text-xs font-mono text-stone-900"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCreateNewProject();
+                              if (e.key === 'Escape') setIsAddingProject(false);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateNewProject}
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-medium cursor-pointer"
+                          >
+                            Create
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingProject(false)}
+                            className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Project Sub-directories */}
+                    {distinctProjects.map((projSlug) => {
+                      const projectKey = `projects/${projSlug}`;
+                      const isProjCollapsed = !!collapsedSubfolders[projectKey] && !searchQuery.trim();
+                      const projectFilesInSub = folderFiles.filter((f) => f.folder === projectKey);
+
+                      // Human-friendly project label
+                      const projectLabel = projSlug
+                        .split('-')
+                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                        .join(' ');
+
+                      return (
+                        <div key={projectKey} className="ml-2 border-l border-blue-200/60 pl-1.5 space-y-0.5">
+                          {/* Project Sub-directory Header */}
+                          <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-blue-50/60 group/proj">
+                            <button
+                              type="button"
+                              onClick={() => toggleSubfolder(projectKey)}
+                              className="flex items-center gap-1.5 font-medium text-xs text-stone-700 hover:text-stone-900 cursor-pointer min-w-0"
+                            >
+                              {isProjCollapsed ? (
+                                <ChevronRight className="w-3 h-3 text-stone-400 shrink-0" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 text-stone-400 shrink-0" />
+                              )}
+                              <Folder className="w-3 h-3 text-blue-600 shrink-0" />
+                              <span className="font-semibold truncate max-w-[130px]" title={projectKey}>
+                                {projectLabel}
+                              </span>
+                              <span className="text-[10px] text-stone-400 font-mono shrink-0">
+                                ({projectFilesInSub.length})
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onQuickNewFileInFolder(projectKey)}
+                              title={`Add new file to ${projSlug}`}
+                              className="p-0.5 opacity-0 group-hover/proj:opacity-100 hover:bg-blue-100 text-blue-800 rounded cursor-pointer transition-opacity shrink-0"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Project Files */}
+                          {!isProjCollapsed && (
+                            <div className="space-y-0.5">
+                              {projectFilesInSub.map((file) => renderFileItem(file, true))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Root Project Files if any */}
+                    {rootProjectFiles.length > 0 && (
+                      <div className="space-y-0.5 pt-1">
+                        {rootProjectFiles.map((file) => renderFileItem(file, true))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Standard / Archive / Skills / Notes / Custom folders
           return (
             <div key={folder} className="space-y-0.5">
               {/* Folder Header */}
@@ -212,7 +845,7 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                   type="button"
                   id={`folder-btn-${folder}`}
                   onClick={() => toggleFolder(folder)}
-                  className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800"
+                  className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800 cursor-pointer"
                 >
                   {isCollapsed ? (
                     <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
@@ -220,7 +853,13 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                     <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
                   )}
                   {isCollapsed ? (
-                    <Folder className="w-3.5 h-3.5 text-stone-400" />
+                    folder === 'archive' ? (
+                      <Archive className="w-3.5 h-3.5 text-purple-500" />
+                    ) : (
+                      <Folder className="w-3.5 h-3.5 text-stone-400" />
+                    )
+                  ) : folder === 'archive' ? (
+                    <Archive className="w-3.5 h-3.5 text-purple-500" />
                   ) : (
                     <FolderOpen className="w-3.5 h-3.5 text-stone-400" />
                   )}
@@ -235,140 +874,21 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                   id={`quick-add-${folder}`}
                   onClick={() => onQuickNewFileInFolder(folder)}
                   title={`Add new ${folder} file`}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-stone-800 hover:bg-stone-200/60 rounded transition-opacity"
+                  className="p-1 opacity-0 group-hover:opacity-100 hover:bg-stone-200 rounded text-stone-500 hover:text-stone-800 cursor-pointer transition-opacity"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Folder Files List */}
+              {/* Files in this Folder */}
               {!isCollapsed && (
-                <div className="pl-2 space-y-0.5">
+                <div className="space-y-0.5 pt-0.5 pl-1.5">
                   {folderFiles.length === 0 ? (
-                    <div className="px-3 py-1.5 text-[11px] text-stone-400 italic">
-                      No files in /{folder}
+                    <div className="px-2 py-1 text-[11px] text-stone-400 italic">
+                      Empty folder
                     </div>
                   ) : (
-                    folderFiles.map((file) => {
-                      const isSelected = file.id === selectedFileId;
-                      const progress = getTaskProgress(file.content);
-                      const title = file.frontmatter.title || file.name.replace(/\.md$/, '');
-                      const status = file.frontmatter.status;
-
-                      return (
-                        <div
-                          key={file.id}
-                          className={`group/item flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition-all ${
-                            isSelected
-                              ? 'bg-stone-900 text-white font-medium shadow-xs'
-                              : 'text-stone-700 hover:bg-stone-200/70'
-                          }`}
-                          onClick={() => onSelectFile(file.id)}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className={isSelected ? 'text-white' : ''}>
-                              {getCategoryIcon(file.folder)}
-                            </span>
-
-                            <div className="truncate flex-1">
-                              <span className="truncate block text-xs">
-                                {title}
-                              </span>
-                              <span
-                                className={`text-[10px] block truncate font-mono ${
-                                  isSelected ? 'text-stone-300' : 'text-stone-400'
-                                }`}
-                              >
-                                {file.name}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Meta pill or action buttons */}
-                          <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                            {/* Task Progress Badge */}
-                            {progress.total > 0 && (
-                              <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium flex items-center gap-0.5 ${
-                                  isSelected
-                                    ? 'bg-stone-800 text-stone-200'
-                                    : progress.completed === progress.total
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-stone-100 text-stone-600'
-                                }`}
-                              >
-                                <CheckCircle className="w-2.5 h-2.5" />
-                                {progress.completed}/{progress.total}
-                              </span>
-                            )}
-
-                            {/* Status Indicator */}
-                            {status && progress.total === 0 && (
-                              <span
-                                className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-mono ${
-                                  isSelected
-                                    ? 'bg-stone-800 text-stone-200'
-                                    : status === 'active' || status === 'in-progress'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-stone-100 text-stone-600'
-                                }`}
-                              >
-                                {status}
-                              </span>
-                            )}
-
-                            {/* Hover Actions */}
-                            <div className="hidden group-hover/item:flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                title="Duplicate file"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDuplicateFile(file);
-                                }}
-                                className={`p-1 rounded ${
-                                  isSelected
-                                    ? 'hover:bg-stone-800 text-stone-300'
-                                    : 'hover:bg-stone-300 text-stone-500'
-                                }`}
-                              >
-                                <Copy className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Download .md file"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  exportSingleFile(file);
-                                }}
-                                className={`p-1 rounded ${
-                                  isSelected
-                                    ? 'hover:bg-stone-800 text-stone-300'
-                                    : 'hover:bg-stone-300 text-stone-500'
-                                }`}
-                              >
-                                <Download className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Delete file"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteFile(file.id);
-                                }}
-                                className={`p-1 rounded ${
-                                  isSelected
-                                    ? 'hover:bg-red-900 text-red-200'
-                                    : 'hover:bg-red-100 text-red-600'
-                                }`}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
+                    folderFiles.map((file) => renderFileItem(file, false))
                   )}
                 </div>
               )}
