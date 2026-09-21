@@ -201,59 +201,53 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
-          {isMockMode && (
-            <a
-              href="./index.html"
-              title="Switch to Google Drive connected view (index.html)"
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
-            >
-              <span>Connect Drive &rarr;</span>
-            </a>
-          )}
+          {/* Google Drive Status & Modal Trigger (completely omitted in mock.html offline mode) */}
+          {!isMockMode && (
+            <>
+              <button
+                type="button"
+                id="btn-google-drive-header"
+                onClick={onOpenDriveModal}
+                title={googleUser ? `Google Drive Connected: ${googleUser.email}` : 'Connect Google Drive'}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
+                  googleUser
+                    ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-300'
+                    : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:border-blue-400'
+                }`}
+              >
+                {googleUser?.photoURL ? (
+                  <img
+                    src={googleUser.photoURL}
+                    alt="Google"
+                    referrerPolicy="no-referrer"
+                    className="w-4 h-4 rounded-full border border-blue-400"
+                  />
+                ) : (
+                  <HardDrive className={`w-3.5 h-3.5 ${googleUser ? 'text-blue-600' : 'text-stone-500'}`} />
+                )}
+                <span>
+                  {googleUser ? 'Google Drive' : 'Connect Drive'}
+                </span>
+                {googleUser && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 ml-0.5" title="Connected" />
+                )}
+              </button>
 
-          {/* Google Drive Status & Modal Trigger */}
-          <button
-            type="button"
-            id="btn-google-drive-header"
-            onClick={onOpenDriveModal}
-            title={googleUser ? `Google Drive Connected: ${googleUser.email}` : 'Connect Google Drive'}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
-              googleUser
-                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-300'
-                : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50 hover:border-blue-400'
-            }`}
-          >
-            {googleUser?.photoURL ? (
-              <img
-                src={googleUser.photoURL}
-                alt="Google"
-                referrerPolicy="no-referrer"
-                className="w-4 h-4 rounded-full border border-blue-400"
-              />
-            ) : (
-              <HardDrive className={`w-3.5 h-3.5 ${googleUser ? 'text-blue-600' : 'text-stone-500'}`} />
-            )}
-            <span>
-              {googleUser ? 'Google Drive' : 'Connect Drive'}
-            </span>
-            {googleUser && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 ml-0.5" title="Connected" />
-            )}
-          </button>
-
-          {/* Refresh files from Google Drive button */}
-          {googleUser && onRefreshDrive && (
-            <button
-              type="button"
-              id="btn-refresh-drive"
-              onClick={onRefreshDrive}
-              disabled={isRefreshingDrive}
-              title="Refresh and sync files from Google Drive"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-stone-500 ${isRefreshingDrive ? 'animate-spin text-blue-600' : ''}`} />
-              <span className="hidden sm:inline">Refresh Drive</span>
-            </button>
+              {/* Refresh files from Google Drive button */}
+              {googleUser && onRefreshDrive && (
+                <button
+                  type="button"
+                  id="btn-refresh-drive"
+                  onClick={onRefreshDrive}
+                  disabled={isRefreshingDrive}
+                  title="Refresh and sync files from Google Drive"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-stone-700 bg-white hover:bg-stone-50 border border-stone-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-stone-500 ${isRefreshingDrive ? 'animate-spin text-blue-600' : ''}`} />
+                  <span className="hidden sm:inline">Refresh Drive</span>
+                </button>
+              )}
+            </>
           )}
 
           {/* Hidden File Input for import */}

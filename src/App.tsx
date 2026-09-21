@@ -783,7 +783,7 @@ export default function App({ forceOffline = false }: AppProps) {
                 onToggleCheckbox={handleToggleCheckbox}
                 onOpenSkillPlayground={(s) => setSkillForPlayground(s)}
                 onRenameFile={handleRenameFile}
-                onSaveToDrive={handleRequestSaveFileToDrive}
+                onSaveToDrive={isMockMode ? undefined : handleRequestSaveFileToDrive}
                 isSavingToDrive={isSavingSingleFileToDrive}
                 isDriveSyncing={isDriveSyncing}
                 googleUser={googleUser}
@@ -842,15 +842,17 @@ export default function App({ forceOffline = false }: AppProps) {
       )}
 
       {/* Google Drive Auth & Sync Modal */}
-      <GoogleDriveSyncModal
-        isOpen={isDriveModalOpen}
-        onClose={() => setIsDriveModalOpen(false)}
-        user={googleUser}
-        onSignInWithGoogle={handleSignInWithGoogle}
-        onSignOut={handleSignOutGoogle}
-        files={files}
-        onImportFilesFromDrive={() => fetchFilesFromDrive(false)}
-      />
+      {!isMockMode && (
+        <GoogleDriveSyncModal
+          isOpen={isDriveModalOpen}
+          onClose={() => setIsDriveModalOpen(false)}
+          user={googleUser}
+          onSignInWithGoogle={handleSignInWithGoogle}
+          onSignOut={handleSignOutGoogle}
+          files={files}
+          onImportFilesFromDrive={() => fetchFilesFromDrive(false)}
+        />
+      )}
 
       {/* Explicit User Confirmation for Single File Save to Drive */}
       {confirmDriveFile && (
