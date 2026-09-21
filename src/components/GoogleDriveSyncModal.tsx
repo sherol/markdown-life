@@ -282,10 +282,11 @@ export const GoogleDriveSyncModal: React.FC<GoogleDriveSyncModalProps> = ({
                 <div className="font-mono text-xs text-stone-700 dark:text-stone-300 bg-white/70 dark:bg-stone-900 p-2 rounded border border-stone-200 dark:border-stone-800">
                   📁 Google Drive / <strong>Markdown Life Vault</strong>
                   <div className="text-[10px] text-stone-400 ml-4 mt-0.5">
-                    ├── /goals/ (milestones & OKRs)<br />
-                    ├── /projects/ (checklists & tasks)<br />
-                    ├── /skills/ (agent prompt specs)<br />
-                    └── /notes/ (logs & rituals)
+                    ├── 1. /goals/ (Goals)<br />
+                    ├── 2. /projects/ (Projects)<br />
+                    ├── 3. /skills/ (Agent Skills)<br />
+                    ├── 4. /notes/ (Notes)<br />
+                    └── 5. /archive/ (Archive)
                   </div>
                 </div>
               </div>

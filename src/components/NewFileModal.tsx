@@ -232,7 +232,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
               >
                 <Target className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-xs">Goals & OKRs</span>
+                  <span className="font-semibold block text-xs">1. Goals</span>
                   <span className="text-[10px] opacity-70">Year sub-directory</span>
                 </div>
               </button>
@@ -251,7 +251,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
               >
                 <Rocket className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-xs">Projects</span>
+                  <span className="font-semibold block text-xs">2. Projects</span>
                   <span className="text-[10px] opacity-70">Per-project sub-dir</span>
                 </div>
               </button>
@@ -270,7 +270,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
               >
                 <Bot className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-xs">Agent Skills</span>
+                  <span className="font-semibold block text-xs">3. Agent Skills</span>
                   <span className="text-[10px] opacity-70">Prompt spec</span>
                 </div>
               </button>
@@ -289,7 +289,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
               >
                 <FileText className="w-4 h-4 text-stone-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-xs">Notes & Rituals</span>
+                  <span className="font-semibold block text-xs">4. Notes</span>
                   <span className="text-[10px] opacity-70">Daily scratchpad</span>
                 </div>
               </button>
@@ -308,7 +308,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
               >
                 <Archive className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-xs">Archive</span>
+                  <span className="font-semibold block text-xs">5. Archive</span>
                   <span className="text-[10px] opacity-70">Legacy storage</span>
                 </div>
               </button>

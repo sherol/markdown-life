@@ -130,10 +130,21 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
   // Helper to determine which top-level category a file belongs to
   const getTopLevelCategory = (file: VaultFile): string => {
     if (file.folder) {
-      const top = file.folder.split('/')[0];
-      return top;
+      const top = file.folder.split('/')[0].toLowerCase().trim();
+      if (top === 'goals' || top.includes('goal')) return 'goals';
+      if (top === 'projects' || top.includes('project')) return 'projects';
+      if (top === 'skills' || top.includes('skill')) return 'skills';
+      if (top === 'notes' || top.includes('note')) return 'notes';
+      if (top === 'archive' || top.includes('archive')) return 'archive';
+      return file.folder.split('/')[0];
     }
     if (file.frontmatter.category) {
+      const cat = file.frontmatter.category.toLowerCase().trim();
+      if (cat === 'goals' || cat.includes('goal')) return 'goals';
+      if (cat === 'projects' || cat.includes('project')) return 'projects';
+      if (cat === 'skills' || cat.includes('skill')) return 'skills';
+      if (cat === 'notes' || cat.includes('note')) return 'notes';
+      if (cat === 'archive' || cat.includes('archive')) return 'archive';
       return file.frontmatter.category;
     }
     return 'notes';
@@ -180,15 +191,15 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
   const getFolderLabel = (folder: string) => {
     switch (folder) {
       case 'goals':
-        return 'Goals & OKRs';
+        return '1. Goals';
       case 'projects':
-        return 'Projects & Initiatives';
+        return '2. Projects';
       case 'skills':
-        return 'Agent Skills';
+        return '3. Agent Skills';
       case 'notes':
-        return 'Notes & Rituals';
+        return '4. Notes';
       case 'archive':
-        return 'Archive';
+        return '5. Archive';
       default:
         return folder.charAt(0).toUpperCase() + folder.slice(1);
     }
@@ -450,11 +461,11 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
           {(
             [
               { id: 'all', label: 'All' },
-              { id: 'goals', label: 'Goals' },
-              { id: 'projects', label: 'Projects' },
-              { id: 'skills', label: 'Skills' },
-              { id: 'notes', label: 'Notes' },
-              { id: 'archive', label: 'Archive' },
+              { id: 'goals', label: '1. Goals' },
+              { id: 'projects', label: '2. Projects' },
+              { id: 'skills', label: '3. Agent Skills' },
+              { id: 'notes', label: '4. Notes' },
+              { id: 'archive', label: '5. Archive' },
             ] as const
           ).map((tab) => {
             const count =
@@ -855,11 +866,19 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                   {isCollapsed ? (
                     folder === 'archive' ? (
                       <Archive className="w-3.5 h-3.5 text-purple-500" />
+                    ) : folder === 'skills' ? (
+                      <Folder className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : folder === 'notes' ? (
+                      <Folder className="w-3.5 h-3.5 text-stone-500" />
                     ) : (
                       <Folder className="w-3.5 h-3.5 text-stone-400" />
                     )
                   ) : folder === 'archive' ? (
                     <Archive className="w-3.5 h-3.5 text-purple-500" />
+                  ) : folder === 'skills' ? (
+                    <FolderOpen className="w-3.5 h-3.5 text-emerald-500" />
+                  ) : folder === 'notes' ? (
+                    <FolderOpen className="w-3.5 h-3.5 text-stone-500" />
                   ) : (
                     <FolderOpen className="w-3.5 h-3.5 text-stone-400" />
                   )}
@@ -888,7 +907,7 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                       Empty folder
                     </div>
                   ) : (
-                    folderFiles.map((file) => renderFileItem(file, false))
+                    folderFiles.map((file) => renderFileItem(file, true))
                   )}
                 </div>
               )}

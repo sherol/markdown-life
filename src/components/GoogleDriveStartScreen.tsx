@@ -72,7 +72,7 @@ export const GoogleDriveStartScreen: React.FC<GoogleDriveStartScreenProps> = ({
               Connect Your Google Drive
             </h1>
             <p className="text-stone-500 text-xs sm:text-sm leading-relaxed max-w-sm mx-auto">
-              Store your goals, project checklists, agent skills, and daily logs as portable Markdown in your own Google Drive.
+              Organize your 1. Goals, 2. Projects, 3. Agent Skills, 4. Notes, and 5. Archive as portable Markdown files in your Google Drive.
             </p>
           </div>
 
