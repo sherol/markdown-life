@@ -11,8 +11,8 @@ interface RawInitialFile {
 const rawFiles: RawInitialFile[] = [
   // --- GOALS ---
   {
-    path: 'goals/2026/ai-systems-mastery.md',
-    folder: 'goals/2026',
+    path: 'goals/ai-systems-mastery.md',
+    folder: 'goals',
     name: 'ai-systems-mastery.md',
     content: `---
 title: AI Systems Mastery & Agent Architecture
@@ -56,8 +56,8 @@ Q3 checkpoint demonstrated reliable tool calling using standard schema validatio
 `
   },
   {
-    path: 'goals/2026/endurance-vitality.md',
-    folder: 'goals/2026',
+    path: 'goals/endurance-vitality.md',
+    folder: 'goals',
     name: 'endurance-vitality.md',
     content: `---
 title: Peak Physical Endurance & Vitality
@@ -93,8 +93,8 @@ Build a durable, high-energy physical vessel through disciplined cardiovascular 
 `
   },
   {
-    path: 'goals/2027/financial-independence-engine.md',
-    folder: 'goals/2027',
+    path: 'goals/financial-independence-engine.md',
+    folder: 'goals',
     name: 'financial-independence-engine.md',
     content: `---
 title: Financial Autonomy & Capital Allocation
@@ -467,8 +467,8 @@ tags:
 
   // --- ARCHIVE ---
   {
-    path: 'archive/2025-annual-retrospective.md',
-    folder: 'archive',
+    path: 'archive/2025/2025-annual-retrospective.md',
+    folder: 'archive/2025',
     name: '2025-annual-retrospective.md',
     content: `---
 title: 2025 Annual Retrospective & Legacy Archive

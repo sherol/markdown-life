@@ -27,16 +27,25 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
 }) => {
   // Determine initial state based on initialFolder
   const getInitialState = () => {
-    if (initialFolder.startsWith('goals/')) {
+    if (initialFolder.startsWith('archive/')) {
       return {
-        cat: 'goals' as FileCategory,
+        cat: 'archive' as FileCategory,
         year: initialFolder.split('/')[1] || new Date().getFullYear().toString(),
         proj: '',
         custom: '',
         isCustom: false,
       };
     }
-    if (initialFolder === 'goals') {
+    if (initialFolder === 'archive') {
+      return {
+        cat: 'archive' as FileCategory,
+        year: new Date().getFullYear().toString(),
+        proj: '',
+        custom: '',
+        isCustom: false,
+      };
+    }
+    if (initialFolder === 'goals' || initialFolder.startsWith('goals/')) {
       return {
         cat: 'goals' as FileCategory,
         year: new Date().getFullYear().toString(),
@@ -81,15 +90,6 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
         isCustom: false,
       };
     }
-    if (initialFolder === 'archive' || initialFolder.startsWith('archive/')) {
-      return {
-        cat: 'archive' as FileCategory,
-        year: new Date().getFullYear().toString(),
-        proj: '',
-        custom: '',
-        isCustom: false,
-      };
-    }
     return {
       cat: 'custom' as FileCategory,
       year: new Date().getFullYear().toString(),
@@ -101,25 +101,26 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
 
   const initState = getInitialState();
   const [category, setCategory] = useState<FileCategory>(initState.cat);
-  const [goalYear, setGoalYear] = useState<string>(initState.year);
+  const [archiveYear, setArchiveYear] = useState<string>(initState.year);
   const [projectSubfolder, setProjectSubfolder] = useState<string>(initState.proj);
   const [isCustomFolder, setIsCustomFolder] = useState<boolean>(initState.isCustom);
   const [customFolderName, setCustomFolderName] = useState<string>(initState.custom);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
 
-  // Extract existing years and existing project folders from existingFolders
-  const existingYears = Array.from(
+  // Extract existing archive years and existing project folders from existingFolders
+  const existingArchiveYears = Array.from(
     new Set(
       existingFolders
-        .filter((f) => f.startsWith('goals/'))
-        .map((f) => f.replace('goals/', '').split('/')[0])
+        .filter((f) => f.startsWith('archive/'))
+        .map((f) => f.replace('archive/', '').split('/')[0])
         .filter(Boolean)
     )
   );
-  if (!existingYears.includes('2026')) existingYears.push('2026');
-  if (!existingYears.includes('2027')) existingYears.push('2027');
-  existingYears.sort((a, b) => b.localeCompare(a));
+  const currentYearStr = new Date().getFullYear().toString();
+  if (!existingArchiveYears.includes(currentYearStr)) existingArchiveYears.push(currentYearStr);
+  if (!existingArchiveYears.includes('2025')) existingArchiveYears.push('2025');
+  existingArchiveYears.sort((a, b) => b.localeCompare(a));
 
   const existingProjectFolders = Array.from(
     new Set(
@@ -151,8 +152,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
       return customFolderName.trim().toLowerCase() || 'custom';
     }
     if (category === 'goals') {
-      const year = goalYear.trim() || new Date().getFullYear().toString();
-      return `goals/${year}`;
+      return 'goals';
     }
     if (category === 'projects') {
       const cleanProject = projectSubfolder
@@ -163,7 +163,8 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
       return cleanProject ? `projects/${cleanProject}` : 'projects';
     }
     if (category === 'archive') {
-      return 'archive';
+      const year = archiveYear.trim() || new Date().getFullYear().toString();
+      return `archive/${year}`;
     }
     if (category === 'skills') {
       return 'skills';
@@ -233,7 +234,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
                 <Target className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold block text-xs">1. Goals</span>
-                  <span className="text-[10px] opacity-70">Year sub-directory</span>
+                  <span className="text-[10px] opacity-70">Strategic outcomes</span>
                 </div>
               </button>
 
@@ -309,7 +310,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
                 <Archive className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-semibold block text-xs">5. Archive</span>
-                  <span className="text-[10px] opacity-70">Legacy storage</span>
+                  <span className="text-[10px] opacity-70">Year sub-directory</span>
                 </div>
               </button>
 
@@ -333,33 +334,33 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
             </div>
 
             {/* Dynamic Sub-directory Configuration */}
-            {!isCustomFolder && category === 'goals' && (
-              <div className="mt-3 p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-2">
+            {!isCustomFolder && category === 'archive' && (
+              <div className="mt-3 p-3 bg-purple-50/60 border border-purple-200/80 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-amber-900 font-semibold flex items-center gap-1.5 text-xs">
-                    <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                    Target Year Sub-Directory
+                  <span className="text-purple-900 font-semibold flex items-center gap-1.5 text-xs">
+                    <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                    Archive Year Sub-Directory
                   </span>
-                  <span className="text-[10px] text-amber-700 font-mono">goals/YYYY</span>
+                  <span className="text-[10px] text-purple-700 font-mono">archive/YYYY</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    value={goalYear}
-                    onChange={(e) => setGoalYear(e.target.value.trim())}
-                    placeholder="e.g. 2026, 2027"
-                    className="flex-1 p-2 bg-white border border-amber-300 rounded-lg text-xs font-mono text-stone-900 focus:outline-hidden focus:border-amber-500"
+                    value={archiveYear}
+                    onChange={(e) => setArchiveYear(e.target.value.trim())}
+                    placeholder="e.g. 2025, 2024"
+                    className="flex-1 p-2 bg-white border border-purple-300 rounded-lg text-xs font-mono text-stone-900 focus:outline-hidden focus:border-purple-500"
                   />
                   <div className="flex items-center gap-1">
-                    {existingYears.map((yr) => (
+                    {existingArchiveYears.map((yr) => (
                       <button
                         key={yr}
                         type="button"
-                        onClick={() => setGoalYear(yr)}
-                        className={`px-2 py-1 rounded-md text-[11px] font-mono transition-colors ${
-                          goalYear === yr
-                            ? 'bg-amber-600 text-white font-medium'
-                            : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-100'
+                        onClick={() => setArchiveYear(yr)}
+                        className={`px-2 py-1 rounded-md text-[11px] font-mono transition-colors cursor-pointer ${
+                          archiveYear === yr
+                            ? 'bg-purple-600 text-white font-medium'
+                            : 'bg-white text-purple-800 border border-purple-200 hover:bg-purple-100'
                         }`}
                       >
                         {yr}

@@ -51,13 +51,17 @@ export const GoogleDriveStartScreen: React.FC<GoogleDriveStartScreenProps> = ({
             Markdown Life & Skills Vault
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onContinueOffline}
-          className="text-xs text-stone-500 hover:text-stone-800 transition-colors cursor-pointer py-1 px-2.5 rounded hover:bg-stone-200/60"
-        >
-          Explore Offline &rarr;
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="./mock.html"
+            id="link-explore-offline-mock"
+            className="text-xs text-stone-600 hover:text-stone-900 transition-colors py-1 px-2.5 rounded bg-stone-200/50 hover:bg-stone-200 border border-stone-200/80 font-medium inline-flex items-center gap-1 cursor-pointer"
+            title="Open dedicated offline mock page (mock.html)"
+          >
+            <span>Explore Offline (mock.html)</span>
+            <span aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
       </header>
 
       {/* Main Centered Gateway Card */}

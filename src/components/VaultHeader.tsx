@@ -33,6 +33,7 @@ interface VaultHeaderProps {
   onOpenDriveModal: () => void;
   onRefreshDrive?: () => void;
   isRefreshingDrive?: boolean;
+  isMockMode?: boolean;
 }
 
 export const VaultHeader: React.FC<VaultHeaderProps> = ({
@@ -48,6 +49,7 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
   onOpenDriveModal,
   onRefreshDrive,
   isRefreshingDrive = false,
+  isMockMode = false,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -110,6 +112,15 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
                 {files.length} markdown files
               </span>
+              {isMockMode && (
+                <span
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-800 border border-amber-300 flex items-center gap-1"
+                  title="Running in local browser storage mode (mock.html)"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                  Offline Mock
+                </span>
+              )}
             </div>
             {/* Quick Metrics Bar */}
             <div className="flex items-center gap-3 text-xs text-stone-500 mt-0.5 font-sans">
@@ -190,6 +201,16 @@ export const VaultHeader: React.FC<VaultHeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {isMockMode && (
+            <a
+              href="./index.html"
+              title="Switch to Google Drive connected view (index.html)"
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
+            >
+              <span>Connect Drive &rarr;</span>
+            </a>
+          )}
+
           {/* Google Drive Status & Modal Trigger */}
           <button
             type="button"

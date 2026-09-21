@@ -29,14 +29,26 @@ import { GoogleDriveSyncModal } from './components/GoogleDriveSyncModal';
 import { ConfirmDriveActionModal } from './components/ConfirmDriveActionModal';
 import { GoogleDriveStartScreen } from './components/GoogleDriveStartScreen';
 
-export default function App() {
-  // If user previously selected offline mode, load local storage files; otherwise start empty until auth
+interface AppProps {
+  forceOffline?: boolean;
+}
+
+export default function App({ forceOffline = false }: AppProps) {
+  const isMockMode =
+    forceOffline ||
+    (typeof window !== 'undefined' &&
+      (window.location.pathname.endsWith('mock.html') ||
+        window.location.pathname.endsWith('/mock') ||
+        window.location.search.includes('offline=true') ||
+        window.location.search.includes('mock=true')));
+
+  // If user is in mock mode or previously selected offline mode, load local storage files; otherwise start empty until auth
   const [files, setFiles] = useState<VaultFile[]>(() => {
-    const bypassed = localStorage.getItem('md_vault_bypassed_auth') === 'true';
+    const bypassed = isMockMode || localStorage.getItem('md_vault_bypassed_auth') === 'true';
     return bypassed ? loadVaultFiles() : [];
   });
   const [selectedFileId, setSelectedFileId] = useState<string | null>(() => {
-    const bypassed = localStorage.getItem('md_vault_bypassed_auth') === 'true';
+    const bypassed = isMockMode || localStorage.getItem('md_vault_bypassed_auth') === 'true';
     if (bypassed) {
       const loaded = loadVaultFiles();
       return loaded.length > 0 ? loaded[0].id : null;
@@ -52,6 +64,7 @@ export default function App() {
   // Google Drive & Auth State
   const [googleUser, setGoogleUser] = useState<User | null>(null);
   const [hasBypassedAuth, setHasBypassedAuth] = useState<boolean>(() => {
+    if (isMockMode) return true;
     return localStorage.getItem('md_vault_bypassed_auth') === 'true';
   });
   const [isStartingSignIn, setIsStartingSignIn] = useState(false);
@@ -113,6 +126,10 @@ export default function App() {
 
   // Initialize Firebase Auth listener
   useEffect(() => {
+    if (isMockMode) {
+      // In offline mock mode, skip Google Drive auto-fetch to maintain local state
+      return;
+    }
     const unsubscribe = initAuth(
       (user) => {
         setGoogleUser(user);
@@ -127,7 +144,17 @@ export default function App() {
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [fetchFilesFromDrive]);
+  }, [fetchFilesFromDrive, isMockMode]);
+
+  // One-time banner when opening in mock mode
+  useEffect(() => {
+    if (isMockMode) {
+      setToastNotification({
+        type: 'info',
+        text: 'Explore Offline: Running in local mock mode with sample files.',
+      });
+    }
+  }, [isMockMode]);
 
   // Toast notification auto-dismiss
   useEffect(() => {
@@ -141,10 +168,10 @@ export default function App() {
 
   // Sync with localStorage ONLY when in offline mode (not authenticated with Google Drive)
   useEffect(() => {
-    if (!googleUser && hasBypassedAuth) {
+    if (isMockMode || (!googleUser && hasBypassedAuth)) {
       saveVaultFiles(files);
     }
-  }, [files, googleUser, hasBypassedAuth]);
+  }, [files, googleUser, hasBypassedAuth, isMockMode]);
 
   // Currently active file object
   const currentFile = files.find((f) => f.id === selectedFileId) || files[0] || null;
@@ -613,7 +640,7 @@ export default function App() {
   };
 
   // If user is not signed in to Google Drive and hasn't chosen offline exploration, show start screen
-  if (!googleUser && !hasBypassedAuth) {
+  if (!isMockMode && !googleUser && !hasBypassedAuth) {
     return (
       <GoogleDriveStartScreen
         onSignIn={handleSignInWithGoogle}
@@ -643,6 +670,7 @@ export default function App() {
         onOpenDriveModal={() => setIsDriveModalOpen(true)}
         onRefreshDrive={() => fetchFilesFromDrive(false)}
         isRefreshingDrive={isRefreshingDrive}
+        isMockMode={isMockMode}
       />
 
       {/* Floating Notification Toast */}

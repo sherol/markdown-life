@@ -225,7 +225,7 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
   const handleCreateNewYear = () => {
     const yr = newYearValue.trim();
     if (!yr) return;
-    onQuickNewFileInFolder(`goals/${yr}`);
+    onQuickNewFileInFolder(`archive/${yr}`);
     setIsAddingYear(false);
   };
 
@@ -515,168 +515,6 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
 
           const isCollapsed = !!collapsedFolders[folder] && !searchQuery.trim();
 
-          // Specialized handling for Goals (Year Sub-directories)
-          if (folder === 'goals') {
-            // Find distinct years
-            const distinctYears = Array.from(
-              new Set(
-                folderFiles
-                  .filter((f) => f.folder.startsWith('goals/'))
-                  .map((f) => f.folder.replace('goals/', '').split('/')[0])
-                  .filter(Boolean)
-              )
-            ).sort((a, b) => b.localeCompare(a));
-
-            // Any goals not in a year subfolder
-            const rootGoalFiles = folderFiles.filter((f) => f.folder === 'goals');
-
-            return (
-              <div key={folder} className="space-y-0.5">
-                {/* Folder Header */}
-                <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-stone-100/80 group">
-                  <button
-                    type="button"
-                    id={`folder-btn-${folder}`}
-                    onClick={() => toggleFolder(folder)}
-                    className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800 cursor-pointer"
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
-                    )}
-                    {isCollapsed ? (
-                      <Folder className="w-3.5 h-3.5 text-amber-500" />
-                    ) : (
-                      <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
-                    )}
-                    <span>{getFolderLabel(folder)}</span>
-                    <span className="text-[10px] font-normal text-stone-400 lowercase font-mono ml-0.5">
-                      ({folderFiles.length})
-                    </span>
-                  </button>
-
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      title="Add Year sub-directory"
-                      onClick={() => setIsAddingYear(true)}
-                      className="text-[10px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
-                    >
-                      <Plus className="w-2.5 h-2.5" />
-                      Year
-                    </button>
-                    <button
-                      type="button"
-                      id={`quick-add-${folder}`}
-                      onClick={() => onQuickNewFileInFolder(distinctYears[0] ? `goals/${distinctYears[0]}` : 'goals/2026')}
-                      title="Quick new goal"
-                      className="p-1 hover:bg-stone-200 rounded text-stone-500 hover:text-stone-800 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Sub-directories and Files */}
-                {!isCollapsed && (
-                  <div className="space-y-1 pt-0.5 pl-1.5">
-                    {/* Inline Year creation input */}
-                    {isAddingYear && (
-                      <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg ml-3 my-1">
-                        <span className="text-[10px] font-semibold text-amber-900 block mb-1">
-                          New Year Sub-Directory:
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={newYearValue}
-                            onChange={(e) => setNewYearValue(e.target.value)}
-                            placeholder="e.g. 2028"
-                            autoFocus
-                            className="flex-1 p-1 bg-white border border-amber-300 rounded text-xs font-mono text-stone-900"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleCreateNewYear();
-                              if (e.key === 'Escape') setIsAddingYear(false);
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleCreateNewYear}
-                            className="px-2 py-1 bg-amber-600 text-white rounded text-[11px] font-medium cursor-pointer"
-                          >
-                            Create
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsAddingYear(false)}
-                            className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Year Sub-directories */}
-                    {distinctYears.map((year) => {
-                      const yearKey = `goals/${year}`;
-                      const isYearCollapsed = !!collapsedSubfolders[yearKey] && !searchQuery.trim();
-                      const yearFiles = folderFiles.filter((f) => f.folder === yearKey);
-
-                      return (
-                        <div key={yearKey} className="ml-2 border-l border-amber-200/60 pl-1.5 space-y-0.5">
-                          {/* Year Sub-directory Header */}
-                          <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-amber-50/60 group/year">
-                            <button
-                              type="button"
-                              onClick={() => toggleSubfolder(yearKey)}
-                              className="flex items-center gap-1.5 font-medium text-xs text-stone-700 hover:text-stone-900 cursor-pointer"
-                            >
-                              {isYearCollapsed ? (
-                                <ChevronRight className="w-3 h-3 text-stone-400" />
-                              ) : (
-                                <ChevronDown className="w-3 h-3 text-stone-400" />
-                              )}
-                              <Calendar className="w-3 h-3 text-amber-600" />
-                              <span className="font-mono font-semibold">{year}</span>
-                              <span className="text-[10px] text-stone-400 font-mono">
-                                ({yearFiles.length})
-                              </span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => onQuickNewFileInFolder(yearKey)}
-                              title={`Add new goal to ${year}`}
-                              className="p-0.5 opacity-0 group-hover/year:opacity-100 hover:bg-amber-100 text-amber-800 rounded cursor-pointer transition-opacity"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
-
-                          {/* Year Files */}
-                          {!isYearCollapsed && (
-                            <div className="space-y-0.5">
-                              {yearFiles.map((file) => renderFileItem(file, true))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    {/* Root Goals if any */}
-                    {rootGoalFiles.length > 0 && (
-                      <div className="space-y-0.5 pt-1">
-                        {rootGoalFiles.map((file) => renderFileItem(file, true))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
           // Specialized handling for Projects (Sub-directory per project)
           if (folder === 'projects') {
             // Find distinct project sub-directories
@@ -847,7 +685,173 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
             );
           }
 
-          // Standard / Archive / Skills / Notes / Custom folders
+          // Specialized handling for Archive (Year Sub-directories and + Year button)
+          if (folder === 'archive') {
+            // Find distinct years
+            const distinctYears = Array.from(
+              new Set(
+                folderFiles
+                  .filter((f) => f.folder.startsWith('archive/'))
+                  .map((f) => f.folder.replace('archive/', '').split('/')[0])
+                  .filter(Boolean)
+              )
+            ).sort((a, b) => b.localeCompare(a));
+
+            // Any archive files at root level (e.g. folder === 'archive')
+            const rootArchiveFiles = folderFiles.filter((f) => f.folder === 'archive');
+
+            return (
+              <div key={folder} className="space-y-0.5">
+                {/* Folder Header */}
+                <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-stone-100/80 group">
+                  <button
+                    type="button"
+                    id={`folder-btn-${folder}`}
+                    onClick={() => toggleFolder(folder)}
+                    className="flex items-center gap-1.5 font-semibold text-[11px] tracking-wide uppercase text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-stone-400" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+                    )}
+                    <Archive className="w-3.5 h-3.5 text-purple-500" />
+                    <span>{getFolderLabel(folder)}</span>
+                    <span className="text-[10px] font-normal text-stone-400 lowercase font-mono ml-0.5">
+                      ({folderFiles.length})
+                    </span>
+                  </button>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      title="Add Year sub-directory to archive"
+                      onClick={() => setIsAddingYear(true)}
+                      className="text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      Year
+                    </button>
+                    <button
+                      type="button"
+                      id={`quick-add-${folder}`}
+                      onClick={() =>
+                        onQuickNewFileInFolder(distinctYears[0] ? `archive/${distinctYears[0]}` : 'archive/2025')
+                      }
+                      title="Quick new archive file"
+                      className="p-1 hover:bg-stone-200 rounded text-stone-500 hover:text-stone-800 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-directories and Files */}
+                {!isCollapsed && (
+                  <div className="space-y-1 pt-0.5 pl-1.5">
+                    {/* Inline Year creation input */}
+                    {isAddingYear && (
+                      <div className="p-2 bg-purple-50/80 border border-purple-200 rounded-lg ml-3 my-1">
+                        <span className="text-[10px] font-semibold text-purple-900 block mb-1">
+                          New Archive Year Sub-Directory:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={newYearValue}
+                            onChange={(e) => setNewYearValue(e.target.value)}
+                            placeholder="e.g. 2025"
+                            autoFocus
+                            className="flex-1 p-1 bg-white border border-purple-300 rounded text-xs font-mono text-stone-900"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCreateNewYear();
+                              if (e.key === 'Escape') setIsAddingYear(false);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateNewYear}
+                            className="px-2 py-1 bg-purple-600 text-white rounded text-[11px] font-medium cursor-pointer"
+                          >
+                            Create
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingYear(false)}
+                            className="p-1 text-stone-400 hover:text-stone-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Year Sub-directories */}
+                    {distinctYears.map((year) => {
+                      const yearKey = `archive/${year}`;
+                      const isYearCollapsed = !!collapsedSubfolders[yearKey] && !searchQuery.trim();
+                      const yearFiles = folderFiles.filter((f) => f.folder === yearKey);
+
+                      return (
+                        <div key={yearKey} className="ml-2 border-l border-purple-200/60 pl-1.5 space-y-0.5">
+                          {/* Year Sub-directory Header */}
+                          <div className="flex items-center justify-between px-2 py-1 text-stone-600 hover:text-stone-900 rounded-md hover:bg-purple-50/60 group/year">
+                            <button
+                              type="button"
+                              onClick={() => toggleSubfolder(yearKey)}
+                              className="flex items-center gap-1.5 font-medium text-xs text-stone-700 hover:text-stone-900 cursor-pointer"
+                            >
+                              {isYearCollapsed ? (
+                                <ChevronRight className="w-3 h-3 text-stone-400" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 text-stone-400" />
+                              )}
+                              <Calendar className="w-3 h-3 text-purple-600" />
+                              <span className="font-mono font-semibold">{year}</span>
+                              <span className="text-[10px] text-stone-400 font-mono">
+                                ({yearFiles.length})
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onQuickNewFileInFolder(yearKey)}
+                              title={`Add new file to archive/${year}`}
+                              className="p-0.5 opacity-0 group-hover/year:opacity-100 hover:bg-purple-100 text-purple-800 rounded cursor-pointer transition-opacity"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Year Files */}
+                          {!isYearCollapsed && (
+                            <div className="space-y-0.5">
+                              {yearFiles.map((file) => renderFileItem(file, true))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Root Archive Files if any */}
+                    {rootArchiveFiles.length > 0 && (
+                      <div className="space-y-0.5 pt-1">
+                        {rootArchiveFiles.map((file) => renderFileItem(file, true))}
+                      </div>
+                    )}
+
+                    {folderFiles.length === 0 && (
+                      <div className="px-2 py-1 text-[11px] text-stone-400 italic">
+                        Empty archive
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Standard / Goals / Skills / Notes / Custom folders
           return (
             <div key={folder} className="space-y-0.5">
               {/* Folder Header */}
@@ -864,8 +868,8 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                     <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
                   )}
                   {isCollapsed ? (
-                    folder === 'archive' ? (
-                      <Archive className="w-3.5 h-3.5 text-purple-500" />
+                    folder === 'goals' ? (
+                      <Folder className="w-3.5 h-3.5 text-amber-500" />
                     ) : folder === 'skills' ? (
                       <Folder className="w-3.5 h-3.5 text-emerald-500" />
                     ) : folder === 'notes' ? (
@@ -873,8 +877,8 @@ export const VaultSidebar: React.FC<VaultSidebarProps> = ({
                     ) : (
                       <Folder className="w-3.5 h-3.5 text-stone-400" />
                     )
-                  ) : folder === 'archive' ? (
-                    <Archive className="w-3.5 h-3.5 text-purple-500" />
+                  ) : folder === 'goals' ? (
+                    <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
                   ) : folder === 'skills' ? (
                     <FolderOpen className="w-3.5 h-3.5 text-emerald-500" />
                   ) : folder === 'notes' ? (
